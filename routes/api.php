@@ -4,33 +4,86 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FormationPackController;
+use App\Http\Controllers\Api\FormationController;
 use App\Http\Controllers\Api\QuizController;
 use App\Http\Controllers\Api\AffiliateController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\TransactionController;
 
-// public
-Route::post('register',[AuthController::class,'register']);
-Route::post('login',[AuthController::class,'login']);
-Route::get('formation-packs',[FormationPackController::class,'index']);
-Route::get('formation-packs/{slug}',[FormationPackController::class,'show']);
-Route::get('quizzes',[QuizController::class,'index']);
-Route::get('quizzes/{id}',[QuizController::class,'show']);
+// Routes publiques
+Route::prefix('v1')->group(function () {
+    // Auth routes
+    Route::prefix('auth')->group(function () {
+        Route::post('register', [AuthController::class, 'register']);
+        Route::post('login', [AuthController::class, 'login']);
+        Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    });
 
-// authenticated
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post('logout',[AuthController::class,'logout']);
-    Route::get('me',[AuthController::class,'profile']);
+    // Packs de formations publics
+    Route::get('packs', [FormationPackController::class, 'index']);
+    Route::get('packs/{id}', [FormationPackController::class, 'show']);
 
-    Route::post('packs/{id}/purchase',[FormationPackController::class,'purchase']);
+    // Quiz publics
+    Route::prefix('quiz')->group(function () {
+        Route::get('available', [QuizController::class, 'available']);
+    });
 
-    Route::post('quizzes/{id}/submit',[QuizController::class,'submit']);
+    // Routes authentifiées
+    Route::middleware('auth:sanctum')->group(function () {
+        // Auth
+        Route::prefix('auth')->group(function () {
+            Route::post('logout', [AuthController::class, 'logout']);
+            Route::get('me', [AuthController::class, 'me']);
+            Route::put('profile', [AuthController::class, 'updateProfile']);
+        });
 
-    Route::get('affiliate/generate',[AffiliateController::class,'generate']);
-    Route::get('affiliate/stats',[AffiliateController::class,'stats']);
+        // Packs de formations
+        Route::prefix('packs')->group(function () {
+            Route::post('{id}/purchase', [FormationPackController::class, 'purchase']);
+            Route::get('{id}/formations', [FormationPackController::class, 'getFormations']);
+        });
 
-    Route::get('wallet/balance',[WalletController::class,'balance']);
-    Route::post('wallet/withdraw',[WalletController::class,'requestWithdrawal']);
+        // Formations
+        Route::prefix('formations')->group(function () {
+            Route::get('{id}', [FormationController::class, 'show']);
+            Route::put('{id}/progress', [FormationController::class, 'updateProgress']);
+            Route::post('modules/{id}/complete', [FormationController::class, 'completeModule']);
+            Route::post('{id}/cashback', [FormationController::class, 'claimCashback']);
+            Route::get('stats', [FormationController::class, 'getProgressStats']);
+            Route::get('{id}/certificate', [FormationController::class, 'downloadCertificate']);
+            Route::get('{id}/notes', [FormationController::class, 'getNotes']);
+            Route::post('{id}/notes', [FormationController::class, 'addNote']);
+        });
 
-    Route::get('transactions',[TransactionController::class,'index']);
+        // Quiz
+        Route::prefix('quiz')->group(function () {
+            Route::get('free-count', [QuizController::class, 'getFreeCount']);
+            Route::post('results', [QuizController::class, 'saveResult']);
+            Route::get('history', [QuizController::class, 'getHistory']);
+            Route::get('stats', [QuizController::class, 'getStats']);
+        });
+
+        // Affiliation
+        Route::prefix('affiliate')->group(function () {
+            Route::get('dashboard', [AffiliateController::class, 'dashboard']);
+            Route::get('list', [AffiliateController::class, 'getAffiliates']);
+            Route::get('stats', [AffiliateController::class, 'getDetailedStats']);
+            Route::post('generate-link', [AffiliateController::class, 'generateLink']);
+            Route::get('banners', [AffiliateController::class, 'getBanners']);
+            Route::get('banners/{id}/download', [AffiliateController::class, 'downloadBanner']);
+            Route::get('commissions', [AffiliateController::class, 'getCommissions']);
+        });
+
+        // Portefeuille
+        Route::prefix('wallet')->group(function () {
+            Route::get('info', [WalletController::class, 'getInfo']);
+            Route::post('withdraw', [WalletController::class, 'requestWithdrawal']);
+            Route::post('deposit', [WalletController::class, 'deposit']);
+            Route::post('transfer', [WalletController::class, 'transfer']);
+        });
+
+        // Transactions
+        Route::get('transactions', [TransactionController::class, 'index']);
+        Route::get('transactions/{id}', [TransactionController::class, 'show']);
+    });
 });

@@ -5,20 +5,26 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Transaction extends Model
+class FormationProgress extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'type', 'amount', 'description', 'status', 'meta'
+        'user_id', 'formation_id', 'progress', 'completed_at', 'cashback_claimed_at'
     ];
 
     protected $casts = [
-        'meta' => 'array'
+        'completed_at' => 'datetime',
+        'cashback_claimed_at' => 'datetime',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function formation()
+    {
+        return $this->belongsTo(Formation::class);
     }
 }

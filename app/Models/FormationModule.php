@@ -5,17 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Quiz extends Model
+class FormationModule extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'title', 'description', 'questions', 'difficulty', 'subject',
-        'questions_count', 'is_active'
+        'formation_id', 'title', 'content', 'video_url', 'duration_minutes',
+        'order', 'is_active'
     ];
 
     protected $casts = [
-        'questions' => 'array',
         'is_active' => 'boolean'
     ];
+
+    public function formation()
+    {
+        return $this->belongsTo(Formation::class);
+    }
 }

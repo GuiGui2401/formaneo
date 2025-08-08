@@ -9,17 +9,27 @@ class Formation extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['pack_id','title','description','duration','video_url','order','metadata'];
+    protected $fillable = [
+        'pack_id', 'title', 'description', 'video_url', 'duration_minutes',
+        'order', 'is_active'
+    ];
 
-    protected $casts = ['metadata'=>'array'];
+    protected $casts = [
+        'is_active' => 'boolean'
+    ];
 
     public function pack()
     {
-        return $this->belongsTo(FormationPack::class,'pack_id');
+        return $this->belongsTo(FormationPack::class, 'pack_id');
     }
 
     public function modules()
     {
-        return $this->hasMany(Module::class);
+        return $this->hasMany(FormationModule::class);
+    }
+
+    public function progress()
+    {
+        return $this->hasMany(FormationProgress::class);
     }
 }
