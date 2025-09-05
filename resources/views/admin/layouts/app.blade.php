@@ -218,6 +218,14 @@
                         </li>
                         
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.ebooks.*') ? 'active' : '' }}" 
+                               href="{{ route('admin.ebooks.index') }}">
+                                <i class="fas fa-book me-2"></i>
+                                Ebooks
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.transactions.*') ? 'active' : '' }}" 
                                href="{{ route('admin.transactions.index') }}">
                                 <i class="fas fa-money-bill-wave me-2"></i>

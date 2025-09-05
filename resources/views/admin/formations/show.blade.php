@@ -15,7 +15,15 @@
 <div class="row">
     <div class="col-lg-4 mb-4">
         <div class="card">
-            <div class="card-body">
+            <div class="card-body text-center">
+                @if($formation->thumbnail_url)
+                    <img src="{{ $formation->thumbnail_url }}" alt="{{ $formation->title }}" class="img-fluid rounded mb-3" style="max-height: 200px;">
+                @else
+                    <div class="bg-light rounded d-flex align-items-center justify-content-center mb-3" style="height: 200px;">
+                        <i class="fas fa-image fa-3x text-muted"></i>
+                    </div>
+                @endif
+                
                 <h4>{{ $formation->title }}</h4>
                 <p class="text-muted">Pack: <a href="{{ route('admin.formation-packs.show', $formation->pack) }}">{{ $formation->pack->name }}</a></p>
                 
@@ -23,7 +31,7 @@
                     <p>{{ $formation->description }}</p>
                 @endif
                 
-                <div class="d-flex gap-2 mb-3">
+                <div class="d-flex gap-2 mb-3 justify-content-center">
                     <span class="status-badge {{ $formation->is_active ? 'status-active' : 'status-inactive' }}">
                         {{ $formation->is_active ? 'Actif' : 'Inactif' }}
                     </span>

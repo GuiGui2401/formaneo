@@ -4,7 +4,7 @@
 @section('page-title', 'Modifier: ' . $formation->title)
 
 @section('content')
-<form action="{{ route('admin.formations.update', $formation) }}" method="POST">
+<form action="{{ route('admin.formations.update', $formation) }}" method="POST" enctype="multipart/form-data">
     @csrf
     @method('PUT')
     
@@ -59,6 +59,48 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Image de couverture -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-image me-2"></i>
+                        Image de couverture
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if($formation->thumbnail_url)
+                        <div class="mb-3">
+                            <label class="form-label">Image actuelle</label>
+                            <div>
+                                <img src="{{ $formation->thumbnail_url }}" alt="{{ $formation->title }}" class="img-thumbnail" style="max-width: 300px;">
+                            </div>
+                        </div>
+                    @endif
+                    
+                    <div class="mb-3">
+                        <label for="thumbnail" class="form-label">Nouvelle image (optionnel)</label>
+                        <input type="file" 
+                               class="form-control @error('thumbnail') is-invalid @enderror" 
+                               id="thumbnail" 
+                               name="thumbnail" 
+                               accept="image/*"
+                               onchange="previewImage(this)">
+                        @error('thumbnail')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">Laissez vide pour conserver l'image actuelle. Formats acceptés: JPG, PNG, GIF. Taille maximale: 2MB</div>
+                    </div>
+                    
+                    <!-- Prévisualisation de la nouvelle image -->
+                    <div id="imagePreview" class="mt-3" style="display: none;">
+                        <label class="form-label">Aperçu de la nouvelle image</label>
+                        <div>
+                            <img id="preview" src="" alt="Aperçu" class="img-thumbnail" style="max-width: 300px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="col-lg-4">
@@ -94,3 +136,21 @@
     </div>
 </form>
 @endsection
+
+@push('scripts')
+<script>
+// Prévisualisation de l'image
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            document.getElementById('preview').src = e.target.result;
+            document.getElementById('imagePreview').style.display = 'block';
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+@endpush

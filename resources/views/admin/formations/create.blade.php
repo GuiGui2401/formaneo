@@ -12,7 +12,7 @@
 @endphp
 
 @section('content')
-<form action="{{ route('admin.formations.store') }}" method="POST">
+<form action="{{ route('admin.formations.store') }}" method="POST" enctype="multipart/form-data">
     @csrf
     
     <div class="row">
@@ -79,6 +79,39 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Image de couverture -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-image me-2"></i>
+                        Image de couverture
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="thumbnail" class="form-label">Image de couverture</label>
+                        <input type="file" 
+                               class="form-control @error('thumbnail') is-invalid @enderror" 
+                               id="thumbnail" 
+                               name="thumbnail" 
+                               accept="image/*"
+                               onchange="previewImage(this)">
+                        @error('thumbnail')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">Formats acceptés: JPG, PNG, GIF. Taille maximale: 2MB</div>
+                    </div>
+                    
+                    <!-- Prévisualisation de l'image -->
+                    <div id="imagePreview" class="mt-3" style="display: none;">
+                        <label class="form-label">Aperçu de l'image</label>
+                        <div>
+                            <img id="preview" src="" alt="Aperçu" class="img-thumbnail" style="max-width: 300px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="col-lg-4">
@@ -139,3 +172,21 @@
     </div>
 </form>
 @endsection
+
+@push('scripts')
+<script>
+// Prévisualisation de l'image
+function previewImage(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            document.getElementById('preview').src = e.target.result;
+            document.getElementById('imagePreview').style.display = 'block';
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
+@endpush

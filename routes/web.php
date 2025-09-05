@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\FormationController;
 use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\EbookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,11 +18,8 @@ use App\Http\Controllers\Admin\SettingsController;
 */
 
 Route::get('/', function () {
-    return redirect('/admin');
+    return redirect('/admin/login');
 });
-
-Route::get('login', [AdminAuthController::class, 'showLoginForm'])->name('login');
-Route::post('login', [AdminAuthController::class, 'login']);
 
 // Routes d'authentification admin
 Route::prefix('admin')->name('admin.')->group(function () {
@@ -74,6 +72,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/{formation}/modules', [FormationController::class, 'storeModule'])->name('modules.store');
             Route::put('/modules/{module}', [FormationController::class, 'updateModule'])->name('modules.update');
             Route::delete('/modules/{module}', [FormationController::class, 'destroyModule'])->name('modules.destroy');
+        });
+
+        // Gestion des ebooks
+        Route::prefix('ebooks')->name('ebooks.')->group(function () {
+            Route::get('/', [EbookController::class, 'index'])->name('index');
+            Route::get('/create', [EbookController::class, 'create'])->name('create');
+            Route::post('/', [EbookController::class, 'store'])->name('store');
+            Route::get('/{ebook}', [EbookController::class, 'show'])->name('show');
+            Route::get('/{ebook}/edit', [EbookController::class, 'edit'])->name('edit');
+            Route::put('/{ebook}', [EbookController::class, 'update'])->name('update');
+            Route::delete('/{ebook}', [EbookController::class, 'destroy'])->name('destroy');
         });
 
         // Gestion des quiz

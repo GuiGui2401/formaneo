@@ -10,12 +10,14 @@ class Formation extends Model
     use HasFactory;
 
     protected $fillable = [
-        'pack_id', 'title', 'description', 'video_url', 'duration_minutes',
+        'pack_id', 'title', 'description', 'video_url', 'thumbnail_url', 'duration_minutes',
         'order', 'is_active'
     ];
 
     protected $casts = [
-        'is_active' => 'boolean'
+        'is_active' => 'boolean',
+        'duration_minutes' => 'integer',
+        'order' => 'integer',
     ];
 
     public function pack()
@@ -31,5 +33,16 @@ class Formation extends Model
     public function progress()
     {
         return $this->hasMany(FormationProgress::class);
+    }
+
+    // Accesseur pour l'URL de la miniature
+    public function getThumbnailUrlAttribute($value)
+    {
+        if ($value) {
+            return $value;
+        }
+        
+        // Retourner une image par défaut si aucune n'est définie
+        return config('app.url') . '/images/formation-default-thumbnail.png';
     }
 }

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\QuizController;
 use App\Http\Controllers\Api\AffiliateController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\Api\EbookController;
 
 // Routes publiques
 Route::prefix('v1')->group(function () {
@@ -26,6 +27,14 @@ Route::prefix('v1')->group(function () {
     // Quiz publics
     Route::prefix('quiz')->group(function () {
         Route::get('available', [QuizController::class, 'available']);
+    });
+
+    // Ebooks publics
+    Route::prefix('ebooks')->group(function () {
+        Route::get('/', [EbookController::class, 'index']);
+        Route::get('/{id}', [EbookController::class, 'show']);
+        Route::get('/search', [EbookController::class, 'search']);
+        Route::get('/categories', [EbookController::class, 'categories']);
     });
 
     // Routes authentifiées
@@ -80,6 +89,12 @@ Route::prefix('v1')->group(function () {
             Route::post('withdraw', [WalletController::class, 'requestWithdrawal']);
             Route::post('deposit', [WalletController::class, 'deposit']);
             Route::post('transfer', [WalletController::class, 'transfer']);
+        });
+
+        // Ebooks
+        Route::prefix('ebooks')->group(function () {
+            Route::post('{id}/purchase', [EbookController::class, 'purchase']);
+            Route::get('{id}/download', [EbookController::class, 'download']);
         });
 
         // Transactions

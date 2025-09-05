@@ -82,6 +82,18 @@ class User extends Authenticatable
         return $this->hasMany(QuizResult::class);
     }
 
+    public function userEbooks()
+    {
+        return $this->hasMany(UserEbook::class);
+    }
+
+    public function purchasedEbooks()
+    {
+        return $this->belongsToMany(Ebook::class, 'user_ebooks', 'user_id', 'ebook_id')
+                    ->withPivot('price_paid', 'purchased_at', 'downloaded_at')
+                    ->withTimestamps();
+    }
+
     // Accesseurs
     public function getFormattedBalanceAttribute()
     {
