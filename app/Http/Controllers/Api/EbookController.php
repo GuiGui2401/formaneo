@@ -58,6 +58,14 @@ class EbookController extends Controller
             $userEbook->update(['downloaded_at' => now()]);
         }
 
+        // Vérifier que l'URL du PDF existe
+        if (empty($ebook->pdf_url)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le fichier PDF n'est pas disponible pour le moment'
+            ], 404);
+        }
+
         // Retourner l'URL du PDF
         return response()->json([
             'success' => true,

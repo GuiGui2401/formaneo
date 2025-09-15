@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AffiliateController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\EbookController;
+use App\Http\Controllers\Api\CinetPayController;
 
 // Routes publiques
 Route::prefix('v1')->group(function () {
@@ -95,6 +96,13 @@ Route::prefix('v1')->group(function () {
         Route::prefix('ebooks')->group(function () {
             Route::post('{id}/purchase', [EbookController::class, 'purchase']);
             Route::get('{id}/download', [EbookController::class, 'download']);
+        });
+
+        // CinetPay
+        Route::prefix('cinetpay')->group(function () {
+            Route::post('pack/{packId}/initiate', [CinetPayController::class, 'initiatePackPayment']);
+            Route::post('ebook/{ebookId}/initiate', [CinetPayController::class, 'initiateEbookPayment']);
+            Route::post('notify', [CinetPayController::class, 'handleNotification']);
         });
 
         // Transactions

@@ -40,12 +40,14 @@ class WalletController extends Controller
     {
         $request->validate([
             'amount' => 'required|numeric|min:1000|max:1000000',
-            'method' => 'sometimes|string|in:mobile_money,bank_transfer'
+            'method' => 'sometimes|string|in:mobile_money,bank_transfer',
+            'phone_number' => 'required|string'
         ]);
 
         $user = $request->user();
         $amount = $request->amount;
         $method = $request->method ?? 'mobile_money';
+        $phoneNumber = $request->phone_number;
 
         // Vérifier que l'utilisateur a assez de fonds
         $availableForWithdrawal = max(0, $user->balance - 1000);
@@ -63,11 +65,23 @@ class WalletController extends Controller
             'amount' => -$amount, // Négatif pour les retraits
             'description' => "Retrait par {$method}",
             'status' => 'pending',
-            'meta' => json_encode(['method' => $method])
+            'meta' => json_encode([
+                'method' => $method,
+                'phone_number' => $phoneNumber
+            ])
         ]);
 
         // Déduire le montant du solde
         $user->decrement('balance', $amount);
+
+        // Envoyer une notification à l'administrateur
+        // Récupérer tous les administrateurs
+        $admins = \App\Models\Admin::all();
+        
+        // Envoyer une notification à chaque administrateur
+        foreach ($admins as $admin) {
+            $admin->notify(new \App\Notifications\WithdrawalRequestNotification($transaction, $user));
+        }
 
         return response()->json([
             'success' => true,

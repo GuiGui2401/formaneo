@@ -10,10 +10,11 @@ class UserPack extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'pack_id', 'purchased_at'
+        'user_id', 'pack_id', 'price_paid', 'purchased_at'
     ];
 
     protected $casts = [
+        'price_paid' => 'decimal:2',
         'purchased_at' => 'datetime'
     ];
 
