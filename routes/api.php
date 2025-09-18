@@ -96,12 +96,12 @@ Route::prefix('v1')->group(function () {
         Route::prefix('ebooks')->group(function () {
             Route::post('{id}/purchase', [EbookController::class, 'purchase']);
             Route::get('{id}/download', [EbookController::class, 'download']);
+            Route::get('{id}/view', [EbookController::class, 'view']); // Nouvelle route pour consultation en ligne
         });
 
-        // CinetPay
+        // CinetPay (uniquement pour les dépôts de fonds)
         Route::prefix('cinetpay')->group(function () {
-            Route::post('pack/{packId}/initiate', [CinetPayController::class, 'initiatePackPayment']);
-            Route::post('ebook/{ebookId}/initiate', [CinetPayController::class, 'initiateEbookPayment']);
+            Route::post('deposit/initiate', [CinetPayController::class, 'initiateDepositPayment']);
             Route::post('notify', [CinetPayController::class, 'handleNotification']);
         });
 

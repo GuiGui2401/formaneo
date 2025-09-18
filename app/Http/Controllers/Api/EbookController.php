@@ -23,12 +23,22 @@ class EbookController extends Controller
     }
 
     // Afficher un ebook spécifique
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $ebook = Ebook::active()->findOrFail($id);
+        $user = $request->user();
+        
+        // Vérifier si l'utilisateur a acheté l'ebook
+        $userEbook = UserEbook::where('user_id', $user->id)
+            ->where('ebook_id', $ebook->id)
+            ->first();
+            
+        // Ajouter l'information d'achat à l'ebook
+        $ebookData = $ebook->toArray();
+        $ebookData['is_purchased'] = $userEbook ? true : false;
 
         return response()->json([
-            'ebook' => $ebook
+            'ebook' => $ebookData
         ]);
     }
 
@@ -72,14 +82,43 @@ class EbookController extends Controller
             'download_url' => $ebook->pdf_url
         ]);
     }
+    
+    // Consulter un ebook en ligne (sans téléchargement)
+    public function view(Request $request, $id)
+    {
+        $user = $request->user();
+        $ebook = Ebook::active()->findOrFail($id);
+
+        // Vérifier si l'utilisateur a acheté l'ebook
+        $userEbook = UserEbook::where('user_id', $user->id)
+            ->where('ebook_id', $ebook->id)
+            ->first();
+
+        if (!$userEbook && $ebook->price > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Vous devez acheter cet ebook pour le consulter'
+            ], 403);
+        }
+
+        // Vérifier que l'URL du PDF existe
+        if (empty($ebook->pdf_url)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le fichier PDF n'est pas disponible pour le moment'
+            ], 404);
+        }
+
+        // Retourner l'URL du PDF pour consultation en ligne
+        return response()->json([
+            'success' => true,
+            'view_url' => $ebook->pdf_url
+        ]);
+    }
 
     // Acheter un ebook
     public function purchase(Request $request, $id)
     {
-        $request->validate([
-            'payment_method' => 'sometimes|string|in:wallet,mobile_money,card'
-        ]);
-
         $user = $request->user();
         $ebook = Ebook::active()->findOrFail($id);
 
@@ -131,7 +170,7 @@ class EbookController extends Controller
         $userEbook = UserEbook::create([
             'user_id' => $user->id,
             'ebook_id' => $ebook->id,
-            'price_paid' => $ebook->price,
+            'price_paid' => $ebook->price, // Enregistrer le prix payé
             'purchased_at' => now(),
         ]);
 
