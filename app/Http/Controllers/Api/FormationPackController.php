@@ -44,14 +44,25 @@ class FormationPackController extends Controller
     }
 
     // Afficher un pack spécifique
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $pack = FormationPack::with(['formations.modules'])
             ->where('is_active', true)
             ->findOrFail($id);
+            
+        $user = $request->user();
+        
+        // Vérifier si l'utilisateur possède ce pack
+        $userPack = UserPack::where('user_id', $user->id)
+            ->where('pack_id', $pack->id)
+            ->first();
+            
+        // Ajouter l'information d'achat au pack
+        $packData = $pack->toArray();
+        $packData['is_purchased'] = $userPack ? true : false;
 
         return response()->json([
-            'pack' => $pack
+            'pack' => $packData
         ]);
     }
 
@@ -88,12 +99,13 @@ class FormationPackController extends Controller
         UserPack::create([
             'user_id' => $user->id,
             'pack_id' => $pack->id,
+            'price_paid' => $pack->price, // Enregistrer le prix payé
             'purchased_at' => now(),
         ]);
 
         // Créer la transaction
         $user->transactions()->create([
-            'type' => 'purchase',
+            'type' => 'pack_purchase',
             'amount' => -$pack->price,
             'description' => "Achat pack {$pack->name}",
             'status' => 'completed',

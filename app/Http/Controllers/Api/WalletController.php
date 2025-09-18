@@ -95,31 +95,26 @@ class WalletController extends Controller
     public function deposit(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:500',
-            'method' => 'required|string|in:mobile_money,bank_transfer,card'
+            'amount' => 'required|numeric|min:500'
         ]);
 
         $user = $request->user();
         $amount = $request->amount;
-        $method = $request->method;
 
         // Créer la transaction de dépôt
         $transaction = $user->transactions()->create([
             'type' => 'deposit',
             'amount' => $amount,
-            'description' => "Dépôt par {$method}",
+            'description' => "Dépôt de fonds via CinetPay",
             'status' => 'pending',
-            'meta' => json_encode(['method' => $method])
+            'meta' => json_encode(['method' => 'cinetpay'])
         ]);
 
-        // Dans un vrai système, ici vous intégreriez avec un gateway de paiement
-        $paymentUrl = config('app.url') . "/payment/{$transaction->id}";
-
+        // Retourner l'ID de la transaction pour initiation du paiement CinetPay
         return response()->json([
             'success' => true,
             'transaction_id' => $transaction->id,
-            'payment_url' => $paymentUrl,
-            'message' => 'Transaction créée, redirection vers le paiement'
+            'message' => 'Transaction de dépôt créée, prête pour le paiement CinetPay'
         ]);
     }
 
