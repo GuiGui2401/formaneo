@@ -62,7 +62,7 @@ class EbookController extends Controller
         if (empty($ebook->pdf_url)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Le fichier PDF n'est pas disponible pour le moment'
+                'message' => 'Le fichier PDF n\'est pas disponible pour le moment'
             ], 404);
         }
 
@@ -139,7 +139,7 @@ class EbookController extends Controller
         $user->transactions()->create([
             'type' => 'ebook_purchase',
             'amount' => -$ebook->price,
-            'description' => "Achat de l'ebook {$ebook->title}",
+            'description' => "Achat de l\'ebook {$ebook->title}",
             'status' => 'completed',
             'meta' => json_encode([
                 'ebook_id' => $ebook->id,
