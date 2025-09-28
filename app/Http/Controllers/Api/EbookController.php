@@ -117,7 +117,7 @@ class EbookController extends Controller
         if (empty($ebook->pdf_url)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Le fichier PDF n'est pas disponible pour le moment'
+                'message' => 'Le fichier PDF n\'est pas disponible pour le moment'
             ], 404);
         }
 
