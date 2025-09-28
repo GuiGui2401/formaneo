@@ -17,6 +17,18 @@ class EbookController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $user = $request->user();
+        if ($user) {
+            $purchasedEbooks = UserEbook::where('user_id', $user->id)->pluck('ebook_id')->toArray();
+            $ebooks->each(function ($ebook) use ($purchasedEbooks) {
+                $ebook->is_purchased = in_array($ebook->id, $purchasedEbooks);
+            });
+        } else {
+            $ebooks->each(function ($ebook) {
+                $ebook->is_purchased = false;
+            });
+        }
+
         return response()->json([
             'ebooks' => $ebooks
         ]);
@@ -200,19 +212,33 @@ class EbookController extends Controller
         $query = $request->get('q');
         $category = $request->get('category');
 
-        $ebooks = Ebook::active();
+        $ebooksQuery = Ebook::active();
 
         if ($query) {
-            $ebooks->where('title', 'like', "%{$query}%")
-                ->orWhere('description', 'like', "%{$query}%")
-                ->orWhere('author', 'like', "%{$query}%");
+            $ebooksQuery->where(function ($q) use ($query) {
+                $q->where('title', 'like', "%{$query}%")
+                  ->orWhere('description', 'like', "%{$query}%")
+                  ->orWhere('author', 'like', "%{$query}%");
+            });
         }
 
         if ($category) {
-            $ebooks->where('category', $category);
+            $ebooksQuery->where('category', $category);
         }
 
-        $ebooks = $ebooks->orderBy('created_at', 'desc')->get();
+        $ebooks = $ebooksQuery->orderBy('created_at', 'desc')->get();
+
+        $user = $request->user();
+        if ($user) {
+            $purchasedEbooks = UserEbook::where('user_id', $user->id)->pluck('ebook_id')->toArray();
+            $ebooks->each(function ($ebook) use ($purchasedEbooks) {
+                $ebook->is_purchased = in_array($ebook->id, $purchasedEbooks);
+            });
+        } else {
+            $ebooks->each(function ($ebook) {
+                $ebook->is_purchased = false;
+            });
+        }
 
         return response()->json([
             'ebooks' => $ebooks
