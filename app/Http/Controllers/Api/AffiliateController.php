@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
-use App\Models\Transaction;
+use Illuminate\Support\Facades\DB;
 
 class AffiliateController extends Controller
 {
@@ -16,29 +16,29 @@ class AffiliateController extends Controller
         
         // Calcul des gains
         $todayEarnings = $user->transactions()
-            ->where('type', 'commission')
+            ->where('type', 'affiliate_commission')
             ->whereDate('created_at', today())
             ->sum('amount');
             
         $yesterdayEarnings = $user->transactions()
-            ->where('type', 'commission')
+            ->where('type', 'affiliate_commission')
             ->whereDate('created_at', today()->subDay())
             ->sum('amount');
             
         $currentMonthEarnings = $user->transactions()
-            ->where('type', 'commission')
+            ->where('type', 'affiliate_commission')
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->sum('amount');
             
         $lastMonthEarnings = $user->transactions()
-            ->where('type', 'commission')
+            ->where('type', 'affiliate_commission')
             ->whereMonth('created_at', now()->subMonth()->month)
             ->whereYear('created_at', now()->subMonth()->year)
             ->sum('amount');
             
         $totalEarnings = $user->transactions()
-            ->where('type', 'commission')
+            ->where('type', 'affiliate_commission')
             ->sum('amount');
 
         // Stats des affiliés
@@ -119,17 +119,49 @@ class AffiliateController extends Controller
     public function getDetailedStats(Request $request)
     {
         $user = $request->user();
-        
-        // Stats fictives pour l'exemple - à implémenter selon vos besoins
+        $period = $request->get('period', 'weekly');
+
+        // --- Top Performers (Top 3 Affiliates by Commission Generated for the Current User) ---
+        $topAffiliates = DB::table('users as affiliates')
+            ->join('transactions', function($join) {
+                $join->on('affiliates.id', '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(transactions.meta, '$.referred_user_id'))"));
+            })
+            ->where('transactions.user_id', $user->id)
+            ->where('transactions.type', 'affiliate_commission')
+            ->whereBetween('transactions.created_at', [now()->startOfWeek(), now()->endOfWeek()])
+            ->select('affiliates.name', DB::raw('SUM(transactions.amount) as total_commission'))
+            ->groupBy('affiliates.id', 'affiliates.name')
+            ->orderByDesc('total_commission')
+            ->take(3)
+            ->get();
+
+        // --- Chart Data (for the last 7 days) ---
+        $labels = [];
+        $commissionsData = [];
+        $signupsData = [];
+
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i);
+            $labels[] = $date->format('D'); // e.g., "Mon"
+
+            $commissionsData[] = Transaction::where('user_id', $user->id)
+                ->where('type', 'affiliate_commission')
+                ->whereDate('created_at', $date)
+                ->sum('amount');
+
+            $signupsData[] = User::where('referred_by', $user->id)
+                ->whereDate('created_at', $date)
+                ->count();
+        }
+
         return response()->json([
-            'clicks' => rand(100, 1000),
-            'conversions' => rand(10, 100),
-            'conversion_rate' => rand(5, 25),
-            'average_commission' => rand(1500, 3000),
-            'top_performers' => [
-                ['name' => 'Marie K.', 'earnings' => 5000],
-                ['name' => 'Jean B.', 'earnings' => 3500],
-                ['name' => 'Sophie L.', 'earnings' => 2800],
+            'top_performers' => $topAffiliates,
+            'chart_data' => [
+                'labels' => $labels, // ['Mon', 'Tue', ...]
+                'datasets' => [
+                    ['label' => 'Commissions', 'data' => $commissionsData],
+                    ['label' => 'Inscriptions', 'data' => $signupsData],
+                ]
             ]
         ]);
     }

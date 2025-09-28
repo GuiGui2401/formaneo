@@ -20,7 +20,7 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6|confirmed',
-            'promo_code' => 'nullable|string|max:10'
+            'promo_code' => 'nullable|string|exists:users,promo_code'
         ]);
 
         $promo = strtoupper(Str::random(5));
@@ -42,9 +42,32 @@ class AuthController extends Controller
         if ($request->promo_code) {
             $referrer = User::where('promo_code', $request->promo_code)->first();
             if ($referrer) {
+                // Link the new user to the referrer
                 $user->update(['referred_by' => $referrer->id]);
+
+                // Determine the commission amount based on the referrer's affiliate count
+                $commissionAmount = $referrer->total_affiliates >= config('app.affiliate_premium_threshold')
+                    ? config('app.commission_premium')
+                    : config('app.commission_basic');
+
+                // Increment referrer's balance
+                $referrer->increment('balance', $commissionAmount);
+
+                // Increment affiliate counters
                 $referrer->increment('total_affiliates');
                 $referrer->increment('monthly_affiliates');
+
+                // Create a transaction for the commission
+                $referrer->transactions()->create([
+                    'type' => 'affiliate_commission',
+                    'amount' => $commissionAmount,
+                    'description' => "Commission pour l'inscription de {$user->name}",
+                    'status' => 'completed',
+                    'meta' => json_encode([
+                        'referred_user_id' => $user->id,
+                        'referred_user_name' => $user->name,
+                    ])
+                ]);
             }
         }
 

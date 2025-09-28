@@ -123,4 +123,14 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Affiliate Commission Settings
+    |--------------------------------------------------------------------------
+    */
+
+    'commission_basic' => 2000.0,
+    'commission_premium' => 2500.0,
+    'affiliate_premium_threshold' => 100,
+
 ];
