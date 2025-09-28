@@ -49,6 +49,7 @@ Route::prefix('v1')->group(function () {
 
         // Packs de formations
         Route::prefix('packs')->group(function () {
+            Route::get('{id}', [FormationPackController::class, 'show']);
             Route::post('{id}/purchase', [FormationPackController::class, 'purchase']);
             Route::get('{id}/formations', [FormationPackController::class, 'getFormations']);
         });
@@ -102,11 +103,17 @@ Route::prefix('v1')->group(function () {
         // CinetPay (uniquement pour les dépôts de fonds)
         Route::prefix('cinetpay')->group(function () {
             Route::post('deposit/initiate', [CinetPayController::class, 'initiateDepositPayment']);
-            Route::post('notify', [CinetPayController::class, 'handleNotification']);
+            Route::post('test', [CinetPayController::class, 'testPayment']);
         });
 
         // Transactions
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::get('transactions/{id}', [TransactionController::class, 'show']);
+    });
+
+    // Routes publiques CinetPay (notifications)
+    Route::prefix('cinetpay')->group(function () {
+        Route::post('notify', [CinetPayController::class, 'handleNotification']);
+        Route::get('notify', [CinetPayController::class, 'handleNotification']); // Pour test GET
     });
 });

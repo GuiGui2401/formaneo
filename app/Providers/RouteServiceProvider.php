@@ -31,6 +31,9 @@ class RouteServiceProvider extends ServiceProvider
     parent::boot();
 
     $this->configureRateLimiting();
+    
+    // Route model bindings
+    Route::model('pack', \App\Models\FormationPack::class);
   }
 
   /**

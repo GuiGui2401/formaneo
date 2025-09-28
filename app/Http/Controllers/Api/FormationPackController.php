@@ -29,6 +29,9 @@ class FormationPackController extends Controller
                 'description' => $pack->description,
                 'thumbnail_url' => $pack->thumbnail_url,
                 'price' => $pack->price,
+                'current_price' => $pack->getCurrentPrice(),
+                'is_on_promotion' => $pack->isPromotionActive(),
+                'promotion_price' => $pack->promotion_price,
                 'total_duration' => $pack->total_duration,
                 'rating' => $pack->rating,
                 'students_count' => $pack->students_count,
@@ -60,6 +63,8 @@ class FormationPackController extends Controller
         // Ajouter l'information d'achat au pack
         $packData = $pack->toArray();
         $packData['is_purchased'] = $userPack ? true : false;
+        $packData['current_price'] = $pack->getCurrentPrice();
+        $packData['is_on_promotion'] = $pack->isPromotionActive();
 
         return response()->json([
             'pack' => $packData
@@ -84,8 +89,11 @@ class FormationPackController extends Controller
             ], 400);
         }
 
+        // Utiliser le prix actuel (promo ou normal)
+        $currentPrice = $pack->getCurrentPrice();
+        
         // Vérifier le solde
-        if ($user->balance < $pack->price) {
+        if ($user->balance < $currentPrice) {
             return response()->json([
                 'success' => false,
                 'message' => 'Solde insuffisant'
@@ -93,30 +101,33 @@ class FormationPackController extends Controller
         }
 
         // Effectuer l'achat
-        $user->decrement('balance', $pack->price);
+        $user->decrement('balance', $currentPrice);
 
         // Créer la relation utilisateur-pack
         UserPack::create([
             'user_id' => $user->id,
             'pack_id' => $pack->id,
-            'price_paid' => $pack->price, // Enregistrer le prix payé
+            'price_paid' => $currentPrice, // Enregistrer le prix payé (peut être prix promo)
             'purchased_at' => now(),
         ]);
 
         // Créer la transaction
         $user->transactions()->create([
             'type' => 'pack_purchase',
-            'amount' => -$pack->price,
+            'amount' => -$currentPrice,
             'description' => "Achat pack {$pack->name}",
             'status' => 'completed',
             'meta' => json_encode([
                 'pack_id' => $pack->id,
-                'pack_name' => $pack->name
+                'pack_name' => $pack->name,
+                'original_price' => $pack->price,
+                'paid_price' => $currentPrice,
+                'was_promotion' => $pack->isPromotionActive()
             ])
         ]);
 
         // Traiter la commission pour le parrain si applicable
-        $this->processReferralCommission($user, $pack->price);
+        $this->processReferralCommission($user, $currentPrice);
 
         return response()->json([
             'success' => true,

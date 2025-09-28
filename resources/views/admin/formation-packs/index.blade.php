@@ -15,7 +15,7 @@
 <div class="card mb-4">
     <div class="card-body">
         <form method="GET" action="{{ route('admin.formation-packs.index') }}" class="row g-3">
-            <div class="col-md-4">
+            <div class="col-lg-3 col-md-6">
                 <label for="search" class="form-label">Rechercher</label>
                 <input type="text" 
                        class="form-control" 
@@ -25,7 +25,7 @@
                        value="{{ request('search') }}">
             </div>
             
-            <div class="col-md-2">
+            <div class="col-lg-2 col-md-3">
                 <label for="status" class="form-label">Statut</label>
                 <select class="form-select" id="status" name="status">
                     <option value="">Tous</option>
@@ -34,8 +34,8 @@
                 </select>
             </div>
             
-            <div class="col-md-2">
-                <label for="featured" class="form-label">Mis en avant</label>
+            <div class="col-lg-2 col-md-3">
+                <label for="featured" class="form-label">Vedette</label>
                 <select class="form-select" id="featured" name="featured">
                     <option value="">Tous</option>
                     <option value="yes" {{ request('featured') === 'yes' ? 'selected' : '' }}>Oui</option>
@@ -43,7 +43,16 @@
                 </select>
             </div>
             
-            <div class="col-md-2">
+            <div class="col-lg-2 col-md-3">
+                <label for="promotion" class="form-label">Promo</label>
+                <select class="form-select" id="promotion" name="promotion">
+                    <option value="">Tous</option>
+                    <option value="yes" {{ request('promotion') === 'yes' ? 'selected' : '' }}>Oui</option>
+                    <option value="no" {{ request('promotion') === 'no' ? 'selected' : '' }}>Non</option>
+                </select>
+            </div>
+            
+            <div class="col-lg-3 col-md-12">
                 <label class="form-label">&nbsp;</label>
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary">
@@ -57,9 +66,8 @@
                 </div>
             </div>
             
-            <div class="col-md-2">
-                <label class="form-label">&nbsp;</label>
-                <a href="{{ route('admin.formation-packs.create') }}" class="btn btn-success w-100">
+            <div class="col-12 mt-3">
+                <a href="{{ route('admin.formation-packs.create') }}" class="btn btn-success">
                     <i class="fas fa-plus me-1"></i>
                     Nouveau Pack
                 </a>
@@ -92,6 +100,13 @@
                                 </span>
                             @endif
                             
+                            @if($pack->isPromotionActive())
+                                <span class="badge bg-danger">
+                                    <i class="fas fa-tag me-1"></i>
+                                    PROMO
+                                </span>
+                            @endif
+                            
                             <span class="status-badge {{ $pack->is_active ? 'status-active' : 'status-inactive' }}">
                                 {{ $pack->is_active ? 'Actif' : 'Inactif' }}
                             </span>
@@ -109,8 +124,13 @@
                     
                     <div class="row text-center mb-3">
                         <div class="col-4">
-                            <div class="fw-bold text-primary">{{ number_format($pack->price) }}</div>
-                            <small class="text-muted">FCFA</small>
+                            @if($pack->isPromotionActive())
+                                <div class="fw-bold text-danger">{{ number_format($pack->promotion_price) }}</div>
+                                <small class="text-muted text-decoration-line-through">{{ number_format($pack->price) }} FCFA</small>
+                            @else
+                                <div class="fw-bold text-primary">{{ number_format($pack->price) }}</div>
+                                <small class="text-muted">FCFA</small>
+                            @endif
                         </div>
                         <div class="col-4">
                             <div class="fw-bold text-info">{{ $pack->formations_count }}</div>

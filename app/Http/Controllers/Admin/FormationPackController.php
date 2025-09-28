@@ -31,6 +31,26 @@ class FormationPackController extends Controller
             $query->where('is_featured', $request->featured === 'yes');
         }
 
+        if ($request->filled('promotion')) {
+            if ($request->promotion === 'yes') {
+                $query->where('is_on_promotion', true)
+                      ->where(function ($q) {
+                          $q->whereNull('promotion_starts_at')
+                            ->orWhere('promotion_starts_at', '<=', now());
+                      })
+                      ->where(function ($q) {
+                          $q->whereNull('promotion_ends_at')
+                            ->orWhere('promotion_ends_at', '>=', now());
+                      });
+            } else {
+                $query->where(function ($q) {
+                    $q->where('is_on_promotion', false)
+                      ->orWhere('promotion_starts_at', '>', now())
+                      ->orWhere('promotion_ends_at', '<', now());
+                });
+            }
+        }
+
         $packs = $query->latest()->paginate(20);
 
         return view('admin.formation-packs.index', compact('packs'));
@@ -190,6 +210,15 @@ class FormationPackController extends Controller
         $pack->update(['is_active' => !$pack->is_active]);
 
         $status = $pack->is_active ? 'activé' : 'désactivé';
+        
+        // Return JSON for AJAX requests
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Pack {$status} avec succès."
+            ]);
+        }
+        
         return back()->with('success', "Pack {$status} avec succès.");
     }
 
@@ -198,6 +227,41 @@ class FormationPackController extends Controller
         $pack->update(['is_featured' => !$pack->is_featured]);
 
         $status = $pack->is_featured ? 'mis en avant' : 'retiré de la mise en avant';
+        
+        // Return JSON for AJAX requests
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Pack {$status} avec succès."
+            ]);
+        }
+        
         return back()->with('success', "Pack {$status} avec succès.");
+    }
+
+    public function togglePromotion(Request $request, FormationPack $pack)
+    {
+        $request->validate([
+            'promotion_price' => 'required_if:is_on_promotion,true|nullable|numeric|min:0',
+            'promotion_starts_at' => 'nullable|date',
+            'promotion_ends_at' => 'nullable|date|after:promotion_starts_at',
+        ]);
+
+        $data = [
+            'is_on_promotion' => $request->boolean('is_on_promotion'),
+            'promotion_price' => $request->promotion_price,
+            'promotion_starts_at' => $request->promotion_starts_at ? \Carbon\Carbon::parse($request->promotion_starts_at) : null,
+            'promotion_ends_at' => $request->promotion_ends_at ? \Carbon\Carbon::parse($request->promotion_ends_at) : null,
+        ];
+
+        $pack->update($data);
+
+        $status = $pack->is_on_promotion ? 'activée' : 'désactivée';
+        
+        // Toujours retourner JSON pour les requêtes AJAX
+        return response()->json([
+            'success' => true,
+            'message' => "Promotion {$status} avec succès."
+        ]);
     }
 }

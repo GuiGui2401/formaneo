@@ -58,6 +58,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{pack}', [FormationPackController::class, 'destroy'])->name('destroy');
             Route::post('/{pack}/toggle-status', [FormationPackController::class, 'toggleStatus'])->name('toggle-status');
             Route::post('/{pack}/toggle-featured', [FormationPackController::class, 'toggleFeatured'])->name('toggle-featured');
+            Route::post('/{pack}/toggle-promotion', [FormationPackController::class, 'togglePromotion'])->name('toggle-promotion');
         });
 
         // Gestion des formations

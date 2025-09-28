@@ -86,6 +86,57 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Gestion des promotions -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Gestion des promotions</h5>
+            </div>
+            <div class="card-body">
+                <form id="promotionForm">
+                    @csrf
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_on_promotion" name="is_on_promotion" 
+                               {{ $pack->is_on_promotion ? 'checked' : '' }}>
+                        <label class="form-check-label" for="is_on_promotion">
+                            Activer la promotion
+                        </label>
+                    </div>
+                    
+                    <div id="promotionFields" style="{{ $pack->is_on_promotion ? '' : 'display: none;' }}">
+                        <div class="mb-3">
+                            <label for="promotion_price" class="form-label">Prix promotionnel (FCFA)</label>
+                            <input type="number" class="form-control" id="promotion_price" name="promotion_price" 
+                                   value="{{ $pack->promotion_price }}" step="0.01" min="0">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="promotion_starts_at" class="form-label">Date de début</label>
+                                    <input type="datetime-local" class="form-control" id="promotion_starts_at" 
+                                           name="promotion_starts_at" 
+                                           value="{{ $pack->promotion_starts_at ? $pack->promotion_starts_at->format('Y-m-d\TH:i') : '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="promotion_ends_at" class="form-label">Date de fin</label>
+                                    <input type="datetime-local" class="form-control" id="promotion_ends_at" 
+                                           name="promotion_ends_at"
+                                           value="{{ $pack->promotion_ends_at ? $pack->promotion_ends_at->format('Y-m-d\TH:i') : '' }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="fas fa-save me-1"></i>
+                        Sauvegarder la promotion
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
     
     <!-- Détails et formations -->
@@ -101,7 +152,16 @@
                         <table class="table table-borderless">
                             <tr>
                                 <td><strong>Prix:</strong></td>
-                                <td>{{ number_format($pack->price) }} FCFA</td>
+                                <td>
+                                    {{ number_format($pack->price) }} FCFA
+                                    @if($pack->isPromotionActive())
+                                        <div class="text-success small">
+                                            <del class="text-muted">{{ number_format($pack->price) }} FCFA</del>
+                                            <strong>{{ number_format($pack->promotion_price) }} FCFA</strong>
+                                            <span class="badge bg-success ms-1">PROMO</span>
+                                        </div>
+                                    @endif
+                                </td>
                             </tr>
                             <tr>
                                 <td><strong>Durée totale:</strong></td>
@@ -306,5 +366,50 @@ function deleteFormation(formationId, formationTitle) {
     document.getElementById('deleteFormationForm').action = `/admin/formations/${formationId}`;
     new bootstrap.Modal(document.getElementById('deleteFormationModal')).show();
 }
+
+// Toggle promotion fields visibility
+document.getElementById('is_on_promotion').addEventListener('change', function() {
+    const promotionFields = document.getElementById('promotionFields');
+    if (this.checked) {
+        promotionFields.style.display = 'block';
+    } else {
+        promotionFields.style.display = 'none';
+    }
+});
+
+// Handle promotion form submission
+document.getElementById('promotionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch(`/admin/formation-packs/{{ $pack->id }}/toggle-promotion`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Promotion sauvegardée avec succès');
+            location.reload();
+        } else {
+            alert(data.message || 'Erreur lors de la sauvegarde de la promotion');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Erreur lors de la sauvegarde de la promotion: ' + error.message);
+    });
+});
 </script>
 @endpush
