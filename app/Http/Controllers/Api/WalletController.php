@@ -27,11 +27,23 @@ class WalletController extends Controller
             ->whereIn('type', ['commission', 'bonus', 'cashback', 'quiz_reward'])
             ->sum('amount');
 
+        // Calculer le total des commissions
+        $totalCommissions = $user->transactions()
+            ->where('type', 'commission')
+            ->sum('amount');
+
+        // Calculer le total des quiz et bonus
+        $totalQuizAndBonus = $user->transactions()
+            ->whereIn('type', ['quiz_reward', 'bonus'])
+            ->sum('amount');
+
         return response()->json([
             'balance' => $user->balance,
             'available_for_withdrawal' => $availableForWithdrawal,
             'pending_withdrawals' => abs($pendingWithdrawals), // abs car les retraits sont négatifs
-            'total_earned' => $totalEarned
+            'total_earned' => $totalEarned,
+            'total_commissions' => $totalCommissions,
+            'total_quiz_and_bonus' => $totalQuizAndBonus,
         ]);
     }
 
