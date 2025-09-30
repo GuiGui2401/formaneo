@@ -14,7 +14,7 @@ class FormationPackController extends Controller
     public function index(Request $request)
     {
         $packs = FormationPack::where('is_active', true)
-            ->with('formations')
+            ->with('formations.modules')
             ->orderBy('is_featured', 'desc')
             ->orderBy('order')
             ->get();
