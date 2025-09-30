@@ -45,30 +45,18 @@ class AffiliateController extends Controller
     public function getDetailedStats(Request $request)
     {
         $user = $request->user();
-        
-        // --- Top Performers (Compatible with SQLite) ---
-        $topAffiliatesData = DB::table('transactions')
-            ->where('user_id', $user->id)
-            ->where('type', 'affiliate_commission')
-            ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
-            ->select(
-                DB::raw("json_extract(meta, '$.referred_user_id') as referred_id"),
-                DB::raw('SUM(amount) as total_commission')
-            )
-            ->groupBy('referred_id')
+
+        // --- Top Performers (for MySQL) ---
+        $topPerformers = DB::table('users as affiliates')
+            ->join('transactions', 'affiliates.id', '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(transactions.meta, '$.referred_user_id'))"))
+            ->where('transactions.user_id', $user->id)
+            ->where('transactions.type', 'affiliate_commission')
+            ->whereBetween('transactions.created_at', [now()->startOfWeek(), now()->endOfWeek()])
+            ->select('affiliates.name', DB::raw('SUM(transactions.amount) as total_commission'))
+            ->groupBy('affiliates.id', 'affiliates.name')
             ->orderByDesc('total_commission')
             ->take(3)
             ->get();
-
-        $topAffiliateIds = $topAffiliatesData->pluck('referred_id')->filter();
-        $topAffiliateUsers = User::whereIn('id', $topAffiliateIds)->pluck('name', 'id');
-
-        $topPerformers = $topAffiliatesData->map(function ($affiliate) use ($topAffiliateUsers) {
-            return [
-                'name' => $topAffiliateUsers[$affiliate->referred_id] ?? 'Utilisateur Inconnu',
-                'total_commission' => $affiliate->total_commission,
-            ];
-        });
 
         // --- Chart Data (for the last 7 days) ---
         $labels = [];

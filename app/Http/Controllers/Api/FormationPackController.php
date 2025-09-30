@@ -36,6 +36,7 @@ class FormationPackController extends Controller
                 'rating' => $pack->rating,
                 'students_count' => $pack->students_count,
                 'formations_count' => $pack->formations->count(),
+                'formations' => $pack->formations,
                 'is_featured' => $pack->is_featured,
                 'created_at' => $pack->created_at,
             ];
