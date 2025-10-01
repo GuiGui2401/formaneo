@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\QuizController;
 use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\EbookController;
+use App\Http\Controllers\Admin\ProductController;
 
 /*
 |--------------------------------------------------------------------------
