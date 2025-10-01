@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Product;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
@@ -34,7 +35,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'image_url' => 'nullable|url',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'price' => 'required|numeric|min:0',
             'promotion_price' => 'nullable|numeric|lt:price',
             'is_on_promotion' => 'boolean',
@@ -44,8 +45,13 @@ class ProductController extends Controller
         ]);
 
         $validated['slug'] = Str::slug($validated['name']);
-        $validated['is_on_promotion'] = $request->has('is_on_promotion');
-        $validated['is_active'] = $request->has('is_active');
+        $validated['is_on_promotion'] = (bool) $request->input('is_on_promotion');
+        $validated['is_active'] = (bool) $request->input('is_active');
+
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('products', 'public');
+            $validated['image_url'] = Storage::url($imagePath);
+        }
 
         Product::create($validated);
 
@@ -76,7 +82,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'image_url' => 'nullable|url',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'price' => 'required|numeric|min:0',
             'promotion_price' => 'nullable|numeric|lt:price',
             'is_on_promotion' => 'boolean',
@@ -86,8 +92,17 @@ class ProductController extends Controller
         ]);
 
         $validated['slug'] = Str::slug($validated['name']);
-        $validated['is_on_promotion'] = $request->has('is_on_promotion');
-        $validated['is_active'] = $request->has('is_active');
+        $validated['is_on_promotion'] = (bool) $request->input('is_on_promotion');
+        $validated['is_active'] = (bool) $request->input('is_active');
+
+        if ($request->hasFile('image')) {
+            // Delete old image if exists
+            if ($product->image_url) {
+                Storage::disk('public')->delete(Str::after($product->image_url, '/storage/'));
+            }
+            $imagePath = $request->file('image')->store('products', 'public');
+            $validated['image_url'] = Storage::url($imagePath);
+        }
 
         $product->update($validated);
 
@@ -99,6 +114,9 @@ class ProductController extends Controller
      */
     public function destroy(Product $product)
     {
+        if ($product->image_url) {
+            Storage::disk('public')->delete(Str::after($product->image_url, '/storage/'));
+        }
         $product->delete();
         return redirect()->route('admin.products.index')->with('success', 'Product deleted successfully.');
     }

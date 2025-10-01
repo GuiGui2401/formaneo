@@ -11,7 +11,7 @@
             <h6 class="m-0 font-weight-bold text-primary">Product Details</h6>
         </div>
         <div class="card-body">
-            <form action="{{ route('admin.products.update', $product->id) }}" method="POST">
+            <form action="{{ route('admin.products.update', $product->id) }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
                 <div class="form-group">
@@ -29,11 +29,17 @@
                     @enderror
                 </div>
                 <div class="form-group">
-                    <label for="image_url">Image URL</label>
-                    <input type="url" class="form-control" id="image_url" name="image_url" value="{{ old('image_url', $product->image_url) }}">
-                    @error('image_url')
+                    <label for="image">Product Image</label>
+                    <input type="file" class="form-control-file" id="image" name="image">
+                    @error('image')
                         <div class="text-danger">{{ $message }}</div>
                     @enderror
+                    @if ($product->image_url)
+                        <div class="mt-2">
+                            Current Image:
+                            <img src="{{ $product->image_url }}" alt="{{ $product->name }}" class="img-thumbnail" width="150">
+                        </div>
+                    @endif
                 </div>
                 <div class="form-group">
                     <label for="price">Price (FCFA)</label>
