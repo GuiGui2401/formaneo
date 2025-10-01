@@ -38,9 +38,9 @@ class ProductController extends Controller
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'price' => 'required|numeric|min:0',
             'promotion_price' => 'nullable|numeric|lt:price',
-            'is_on_promotion' => 'boolean',
+            'is_on_promotion' => '',
             'category' => 'required|string|max:255',
-            'is_active' => 'boolean',
+            'is_active' => '',
             'metadata' => 'nullable|json',
         ]);
 
@@ -85,9 +85,9 @@ class ProductController extends Controller
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'price' => 'required|numeric|min:0',
             'promotion_price' => 'nullable|numeric|lt:price',
-            'is_on_promotion' => 'boolean',
+            'is_on_promotion' => '',
             'category' => 'required|string|max:255',
-            'is_active' => 'boolean',
+            'is_active' => '',
             'metadata' => 'nullable|json',
         ]);
 
