@@ -83,6 +83,8 @@ class DatabaseSeeder extends Seeder
         echo "   - 12 utilisateurs (dont 10 affiliés)\n";
         echo "   - Quiz et résultats\n";
         echo "   - Progrès et notes des formations\n";
+
+        $this->call(ProductSeeder::class);
     }
     
     private function createSettings(): void

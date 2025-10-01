@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\EbookController;
 use App\Http\Controllers\Api\CinetPayController;
+use App\Http\Controllers\Api\ProductController;
 
 // Routes publiques
 Route::prefix('v1')->group(function () {
@@ -19,6 +20,12 @@ Route::prefix('v1')->group(function () {
         Route::post('register', [AuthController::class, 'register']);
         Route::post('login', [AuthController::class, 'login']);
         Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    });
+
+    // Produits (pour la boutique)
+    Route::prefix('products')->group(function () {
+        Route::get('/', [ProductController::class, 'index']);
+        Route::get('/{id}', [ProductController::class, 'show']);
     });
 
     // Packs de formations publics
