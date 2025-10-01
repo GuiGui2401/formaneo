@@ -24,7 +24,7 @@ class ProductSeeder extends Seeder
         foreach ($formationPacks as $pack) {
             Product::create([
                 'name' => $pack->name,
-                'slug' => Str::slug($pack->name),
+                'slug' => $this->generateUniqueSlug($pack->name),
                 'description' => $pack->description,
                 'image_url' => $pack->thumbnail_url,
                 'price' => $pack->price,
@@ -41,7 +41,7 @@ class ProductSeeder extends Seeder
         foreach ($ebooks as $ebook) {
             Product::create([
                 'name' => $ebook->title,
-                'slug' => Str::slug($ebook->title),
+                'slug' => $this->generateUniqueSlug($ebook->title),
                 'description' => $ebook->description,
                 'image_url' => $ebook->cover_image_url,
                 'price' => $ebook->price,
@@ -56,7 +56,7 @@ class ProductSeeder extends Seeder
         // Add some dummy digital products
         Product::create([
             'name' => 'Outil de Productivité Avancé',
-            'slug' => 'outil-productivite-avance',
+            'slug' => $this->generateUniqueSlug('Outil de Productivité Avancé'),
             'description' => 'Un ensemble d\'outils pour booster votre productivité au quotidien.',
             'image_url' => 'https://via.placeholder.com/400x300.png?text=Productivity+Tool',
             'price' => 49.99,
@@ -69,7 +69,7 @@ class ProductSeeder extends Seeder
 
         Product::create([
             'name' => 'Pack de Modèles Marketing',
-            'slug' => 'pack-modeles-marketing',
+            'slug' => $this->generateUniqueSlug('Pack de Modèles Marketing'),
             'description' => 'Des modèles prêts à l\'emploi pour vos campagnes marketing.',
             'image_url' => 'https://via.placeholder.com/400x300.png?text=Marketing+Templates',
             'price' => 29.99,
@@ -79,5 +79,18 @@ class ProductSeeder extends Seeder
             'is_active' => true,
             'metadata' => ['includes' => ['email templates', 'social media templates', 'ad copy templates']],
         ]);
+    }
+
+    private function generateUniqueSlug(string $name): string
+    {
+        $slug = Str::slug($name);
+        $originalSlug = $slug;
+        $count = 1;
+
+        while (Product::where('slug', $slug)->exists()) {
+            $slug = $originalSlug . '-' . $count++;
+        }
+
+        return $slug;
     }
 }
