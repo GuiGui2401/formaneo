@@ -224,6 +224,14 @@
                                 Ebooks
                             </a>
                         </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.products.*') ? 'active' : '' }}" 
+                               href="{{ route('admin.products.index') }}">
+                                <i class="fas fa-box-open me-2"></i>
+                                Products
+                            </a>
+                        </li>
                         
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.transactions.*') ? 'active' : '' }}" 

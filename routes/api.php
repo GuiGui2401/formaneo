@@ -116,6 +116,14 @@ Route::prefix('v1')->group(function () {
         // Transactions
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::get('transactions/{id}', [TransactionController::class, 'show']);
+
+        // Panier
+        Route::prefix('cart')->group(function () {
+            Route::post('add', [CartController::class, 'add']);
+            Route::get('/', [CartController::class, 'index']);
+            Route::post('remove', [CartController::class, 'remove']);
+            Route::post('checkout', [CartController::class, 'checkout']);
+        });
     });
 
     // Routes publiques CinetPay (notifications)

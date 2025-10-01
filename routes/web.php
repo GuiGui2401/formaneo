@@ -112,5 +112,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', [SettingsController::class, 'index'])->name('index');
             Route::put('/', [SettingsController::class, 'update'])->name('update');
         });
+
+        // Gestion des produits (pour la boutique)
+        Route::resource('products', AdminProductController::class);
     });
 });
