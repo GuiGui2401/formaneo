@@ -115,6 +115,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         // Gestion des produits (pour la boutique)
-        Route::resource('products', AdminProductController::class);
+        Route::resource('products', \App\Http\Controllers\Admin\ProductController::class);
     });
 });
