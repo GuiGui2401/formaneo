@@ -111,6 +111,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('cinetpay')->group(function () {
             Route::post('deposit/initiate', [CinetPayController::class, 'initiateDepositPayment']);
             Route::post('test', [CinetPayController::class, 'testPayment']);
+            Route::post('check-status', [CinetPayController::class, 'checkTransactionStatus']);
         });
 
         // Transactions

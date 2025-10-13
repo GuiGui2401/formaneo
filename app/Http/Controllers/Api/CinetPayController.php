@@ -32,7 +32,7 @@ class CinetPayController extends Controller
     public function initiateDepositPayment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:500|multiple_of:5', // Montant minimum et multiple de 5
+            'amount' => 'required|numeric|min:100|multiple_of:5', // Montant minimum CinetPay et multiple de 5
             'phone_number' => 'nullable|string', // Numéro de téléphone optionnel
         ]);
 
@@ -197,6 +197,21 @@ class CinetPayController extends Controller
                 ]);
                 
                 Log::info('Transaction Failed', ['transaction_id' => $transactionId]);
+                
+            } elseif (in_array($status, ['CANCELLED', 'CANCELED']) && $transaction->status !== 'cancelled') {
+                $transaction->update([
+                    'status' => 'cancelled',
+                    'meta' => json_encode(array_merge(
+                        json_decode($transaction->meta, true),
+                        ['cinetpay_verification' => $verificationResult['data']]
+                    ))
+                ]);
+                
+                Log::info('Transaction Cancelled', ['transaction_id' => $transactionId]);
+                
+            } elseif ($status === 'WAITING_FOR_CUSTOMER' && $transaction->status === 'pending') {
+                // Ne pas changer le statut, juste logger
+                Log::info('Transaction Waiting for Customer', ['transaction_id' => $transactionId]);
             }
         }
 
@@ -273,7 +288,7 @@ class CinetPayController extends Controller
     public function testPayment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:500|multiple_of:5',
+            'amount' => 'required|numeric|min:100|multiple_of:5',
             'phone' => 'required|string'
         ]);
 
@@ -322,6 +337,74 @@ class CinetPayController extends Controller
                 'success' => false,
                 'error' => $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * API pour vérifier le statut d'une transaction spécifique
+     */
+    public function checkTransactionStatus(Request $request)
+    {
+        $request->validate([
+            'transaction_id' => 'required|string'
+        ]);
+
+        $transactionId = $request->transaction_id;
+        $user = $request->user();
+
+        // Vérifier que la transaction appartient à l'utilisateur
+        $transaction = Transaction::where('user_id', $user->id)
+            ->whereJsonContains('meta->transaction_id', $transactionId)
+            ->first();
+
+        if (!$transaction) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction non trouvée'
+            ], 404);
+        }
+
+        // Vérifier le statut avec CinetPay
+        $verificationResult = $this->verifyTransaction($transactionId);
+
+        if ($verificationResult['success']) {
+            $cinetpayStatus = $verificationResult['data']['status'];
+            $currentStatus = $transaction->status;
+
+            // Mettre à jour le statut si nécessaire
+            if ($cinetpayStatus === 'ACCEPTED' && $currentStatus !== 'completed') {
+                $transaction->update([
+                    'status' => 'completed',
+                    'meta' => json_encode(array_merge(
+                        json_decode($transaction->meta, true),
+                        ['cinetpay_verification' => $verificationResult['data']]
+                    ))
+                ]);
+                $this->processDeposit($transaction);
+                $currentStatus = 'completed';
+                
+            } elseif ($cinetpayStatus === 'REFUSED' && $currentStatus !== 'failed') {
+                $transaction->update(['status' => 'failed']);
+                $currentStatus = 'failed';
+                
+            } elseif (in_array($cinetpayStatus, ['CANCELLED', 'CANCELED']) && $currentStatus !== 'cancelled') {
+                $transaction->update(['status' => 'cancelled']);
+                $currentStatus = 'cancelled';
+            }
+
+            return response()->json([
+                'success' => true,
+                'status' => $currentStatus,
+                'cinetpay_status' => $cinetpayStatus,
+                'amount' => $transaction->amount,
+                'created_at' => $transaction->created_at
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'Impossible de vérifier le statut avec CinetPay',
+                'current_status' => $transaction->status
+            ], 500);
         }
     }
 }
