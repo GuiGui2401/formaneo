@@ -166,7 +166,7 @@ class FormationPackController extends Controller
         ]);
     }
 
-    // Traiter la commission de parrainage
+    // Traiter la commission de parrainage (à chaque paiement)
     private function processReferralCommission($user, $purchaseAmount)
     {
         if (!$user->referred_by) {
@@ -178,54 +178,37 @@ class FormationPackController extends Controller
             return;
         }
 
-        // Commission niveau 1 (1000 FCFA pour premier achat)
-        $level1Commission = 1000.0;
-        
-        // Vérifier si c'est le premier achat de ce filleul
+        // Déterminer le montant de la commission en fonction du nombre d'affiliés
+        $commissionAmount = $referrer->total_affiliates >= config('app.affiliate_premium_threshold', 10)
+            ? config('app.commission_premium', 1000)
+            : config('app.commission_basic', 500);
+
+        // Incrémenter le solde du parrain
+        $referrer->increment('balance', $commissionAmount);
+        $referrer->increment('total_commissions', $commissionAmount);
+
+        // Vérifier si c'est le premier achat du filleul pour incrémenter le compteur
         $isFirstPurchase = $user->transactions()
-            ->where('type', 'purchase')
+            ->whereIn('type', ['pack_purchase', 'ebook_purchase', 'product_purchase'])
             ->count() === 1;
 
         if ($isFirstPurchase) {
-            $referrer->increment('balance', $level1Commission);
-            $referrer->increment('total_commissions', $level1Commission);
-
-            $referrer->transactions()->create([
-                'type' => 'commission',
-                'amount' => $level1Commission,
-                'description' => "Commission niveau 1 - Premier achat de {$user->name}",
-                'status' => 'completed',
-                'meta' => json_encode([
-                    'referral_id' => $user->id,
-                    'referral_name' => $user->name,
-                    'level' => 1,
-                    'purchase_amount' => $purchaseAmount
-                ])
-            ]);
-
-            // Commission niveau 2 si le parrain a lui-même un parrain
-            if ($referrer->referred_by) {
-                $level2Referrer = \App\Models\User::find($referrer->referred_by);
-                if ($level2Referrer) {
-                    $level2Commission = 500.0;
-                    
-                    $level2Referrer->increment('balance', $level2Commission);
-                    $level2Referrer->increment('total_commissions', $level2Commission);
-
-                    $level2Referrer->transactions()->create([
-                        'type' => 'commission',
-                        'amount' => $level2Commission,
-                        'description' => "Commission niveau 2 - Achat de sous-filleul {$user->name}",
-                        'status' => 'completed',
-                        'meta' => json_encode([
-                            'referral_id' => $user->id,
-                            'referral_name' => $user->name,
-                            'level' => 2,
-                            'purchase_amount' => $purchaseAmount
-                        ])
-                    ]);
-                }
-            }
+            $referrer->increment('total_affiliates');
+            $referrer->increment('monthly_affiliates');
         }
+
+        // Créer une transaction pour la commission
+        $referrer->transactions()->create([
+            'type' => 'affiliate_commission',
+            'amount' => $commissionAmount,
+            'description' => "Commission pour l'achat de {$user->name}",
+            'status' => 'completed',
+            'meta' => json_encode([
+                'referred_user_id' => $user->id,
+                'referred_user_name' => $user->name,
+                'purchase_amount' => $purchaseAmount,
+                'is_first_purchase' => $isFirstPurchase
+            ])
+        ]);
     }
 }

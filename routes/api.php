@@ -12,6 +12,9 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\EbookController;
 use App\Http\Controllers\Api\CinetPayController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ChallengeController;
+use App\Http\Controllers\Api\SupportController;
+use App\Http\Controllers\Api\CartController;
 
 // Routes publiques
 Route::prefix('v1')->group(function () {
@@ -43,6 +46,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/{id}', [EbookController::class, 'show']);
         Route::get('/search', [EbookController::class, 'search']);
         Route::get('/categories', [EbookController::class, 'categories']);
+    });
+
+    // Support (publique)
+    Route::prefix('support')->group(function () {
+        Route::get('info', [SupportController::class, 'index']);
+        Route::post('request', [SupportController::class, 'submitRequest']);
     });
 
     // Routes authentifiées
@@ -87,8 +96,8 @@ Route::prefix('v1')->group(function () {
             Route::get('list', [AffiliateController::class, 'getAffiliates']);
             Route::get('stats', [AffiliateController::class, 'getDetailedStats']);
             Route::post('generate-link', [AffiliateController::class, 'generateLink']);
-            Route::get('banners', [AffiliateController::class, 'getBanners']);
-            Route::get('banners/{id}/download', [AffiliateController::class, 'downloadBanner']);
+            Route::get('banners', [AffiliateController::class, 'getBanners'])->name('api.affiliate.banners');
+            Route::get('banners/{id}/download', [AffiliateController::class, 'downloadBanner'])->name('api.affiliate.banner.download');
             Route::get('commissions', [AffiliateController::class, 'getCommissions']);
         });
 
@@ -107,6 +116,15 @@ Route::prefix('v1')->group(function () {
             Route::get('{id}/view', [EbookController::class, 'view']); // Nouvelle route pour consultation en ligne
         });
 
+        // Challenges
+        Route::prefix('challenges')->group(function () {
+            Route::get('/', [ChallengeController::class, 'index']);
+            Route::get('user', [ChallengeController::class, 'userChallenges']);
+            Route::post('{id}/complete', [ChallengeController::class, 'complete']);
+            Route::post('{id}/claim', [ChallengeController::class, 'claimReward']);
+            Route::post('{id}/progress', [ChallengeController::class, 'updateProgress']);
+        });
+
         // CinetPay (uniquement pour les dépôts de fonds)
         Route::prefix('cinetpay')->group(function () {
             Route::post('deposit/initiate', [CinetPayController::class, 'initiateDepositPayment']);
@@ -121,6 +139,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('cart')->group(function () {
             Route::post('add', [CartController::class, 'add']);
             Route::get('/', [CartController::class, 'index']);
+            Route::post('update-quantity', [CartController::class, 'updateQuantity']);
             Route::post('remove', [CartController::class, 'remove']);
             Route::post('checkout', [CartController::class, 'checkout']);
         });

@@ -198,11 +198,60 @@ class EbookController extends Controller
             ])
         ]);
 
+        // Traiter la commission pour le parrain si applicable
+        $this->processReferralCommission($user, $ebook->price);
+
         return response()->json([
             'success' => true,
             'message' => 'Ebook acheté avec succès',
             'download_url' => $ebook->pdf_url,
             'new_balance' => $user->balance
+        ]);
+    }
+
+    // Traiter la commission de parrainage (à chaque paiement)
+    private function processReferralCommission($user, $purchaseAmount)
+    {
+        if (!$user->referred_by) {
+            return;
+        }
+
+        $referrer = \App\Models\User::find($user->referred_by);
+        if (!$referrer) {
+            return;
+        }
+
+        // Déterminer le montant de la commission en fonction du nombre d'affiliés
+        $commissionAmount = $referrer->total_affiliates >= config('app.affiliate_premium_threshold', 10)
+            ? config('app.commission_premium', 1000)
+            : config('app.commission_basic', 500);
+
+        // Incrémenter le solde du parrain
+        $referrer->increment('balance', $commissionAmount);
+        $referrer->increment('total_commissions', $commissionAmount);
+
+        // Vérifier si c'est le premier achat du filleul pour incrémenter le compteur
+        $isFirstPurchase = $user->transactions()
+            ->whereIn('type', ['pack_purchase', 'ebook_purchase', 'product_purchase'])
+            ->count() === 1;
+
+        if ($isFirstPurchase) {
+            $referrer->increment('total_affiliates');
+            $referrer->increment('monthly_affiliates');
+        }
+
+        // Créer une transaction pour la commission
+        $referrer->transactions()->create([
+            'type' => 'affiliate_commission',
+            'amount' => $commissionAmount,
+            'description' => "Commission pour l'achat de {$user->name}",
+            'status' => 'completed',
+            'meta' => json_encode([
+                'referred_user_id' => $user->id,
+                'referred_user_name' => $user->name,
+                'purchase_amount' => $purchaseAmount,
+                'is_first_purchase' => $isFirstPurchase
+            ])
         ]);
     }
 
