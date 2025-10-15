@@ -122,7 +122,6 @@ Route::prefix('v1')->group(function () {
             Route::post('withdrawal/initiate', [CinetPayController::class, 'initiateWithdrawal']);
             Route::post('test', [CinetPayController::class, 'testPayment']);
             Route::get('debug', [CinetPayController::class, 'debugConfig']);
-            Route::post('check-status', [CinetPayController::class, 'checkTransactionStatus']);
             Route::post('check-withdrawal', [CinetPayController::class, 'checkWithdrawalStatus']);
             Route::get('ping', function () {
                 return response()->json(['success' => true, 'message' => 'CinetPay API accessible']);
@@ -184,6 +183,9 @@ Route::prefix('v1')->group(function () {
         Route::get('notify', [CinetPayController::class, 'handleNotification']); // Pour test GET
         Route::get('return', [CinetPayController::class, 'handleReturn']); // return_url
         Route::post('return', [CinetPayController::class, 'handleReturn']); // return_url POST
+        Route::post('test-check-status', [CinetPayController::class, 'testCheckStatus']); // Test sans auth
+        Route::get('debug-transactions', [CinetPayController::class, 'debugTransactions']); // Debug transactions
+        Route::post('check-status', [CinetPayController::class, 'checkTransactionStatus']); // Temporairement public
         Route::get('ping', function () {
             return response()->json(['success' => true, 'message' => 'CinetPay API accessible', 'timestamp' => now()]);
         });

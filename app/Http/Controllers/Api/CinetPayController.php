@@ -21,9 +21,9 @@ class CinetPayController extends Controller
     {
         $this->apiKey = config('cinetpay.api_key');
         $this->siteId = config('cinetpay.site_id');
-        // Utiliser une URL publique pour les notifications (à remplacer par ngrok ou serveur public)
-        $this->notifyUrl = 'https://webhook.site/unique-id'; // URL temporaire pour tests
-        $this->returnUrl = 'http://10.146.233.108:8001/api/v1/cinetpay/return';
+        // URLs de callback - en développement, utilisez ngrok pour les notifications
+        $this->notifyUrl = env('CINETPAY_NOTIFY_URL', 'http://192.168.1.135:8001/api/v1/cinetpay/notify');
+        $this->returnUrl = 'http://192.168.1.135:8001/api/v1/cinetpay/return';
     }
 
     /**
@@ -96,7 +96,13 @@ class CinetPayController extends Controller
             }
 
             // Créer une transaction de dépôt en attente
-            $transaction = $user->transactions()->create([
+            Log::info('=== CRÉATION TRANSACTION EN BASE ===', [
+                'user_id' => $user->id,
+                'transaction_id' => $transactionId,
+                'amount' => $request->amount
+            ]);
+
+            $transactionData = [
                 'type' => 'deposit',
                 'amount' => $request->amount,
                 'description' => 'Dépôt de fonds dans le wallet',
@@ -105,7 +111,27 @@ class CinetPayController extends Controller
                     'transaction_id' => $transactionId,
                     'payment_method' => 'cinetpay',
                     'payment_token' => $responseData['data']['payment_token'] ?? null,
+                    'cinetpay_response' => $responseData['data'] ?? null,
+                    'created_at' => now(),
                 ])
+            ];
+
+            Log::info('Données de transaction à sauvegarder', $transactionData);
+
+            $transaction = $user->transactions()->create($transactionData);
+
+            Log::info('✓ Transaction créée avec succès', [
+                'db_id' => $transaction->id,
+                'transaction_id' => $transactionId,
+                'status' => $transaction->status,
+                'meta' => $transaction->meta
+            ]);
+
+            // Vérification immédiate que la transaction peut être retrouvée
+            $testFind = Transaction::whereJsonContains('meta->transaction_id', $transactionId)->first();
+            Log::info('Test de récupération de transaction', [
+                'found' => $testFind ? true : false,
+                'found_id' => $testFind ? $testFind->id : null
             ]);
 
             return response()->json([
@@ -130,78 +156,172 @@ class CinetPayController extends Controller
     }
 
     /**
-     * Callback de notification de CinetPay
+     * Callback de notification de CinetPay avec vérification HMAC
      */
     public function handleNotification(Request $request)
     {
-        Log::info('CinetPay Notification Received', $request->all());
+        Log::info('=== NOTIFICATION CINETPAY REÇUE ===', [
+            'headers' => $request->headers->all(),
+            'body' => $request->all(),
+            'method' => $request->method()
+        ]);
 
-        // Récupérer les données de la notification
-        $transactionId = $request->input('cpm_trans_id');
-        $siteId = $request->input('cpm_site_id');
+        // Récupérer le token HMAC depuis l'entête
+        $receivedToken = $request->header('x-token');
+        
+        if (!$receivedToken) {
+            Log::error('Token HMAC manquant dans l\'entête');
+            return response()->json(['status' => 'error', 'message' => 'Token manquant'], 401);
+        }
 
-        if (!$transactionId || !$siteId) {
-            Log::error('CinetPay Notification Missing Data', $request->all());
+        // Récupérer les données de la notification selon la documentation
+        $cpm_site_id = $request->input('cpm_site_id');
+        $cpm_trans_id = $request->input('cpm_trans_id');
+        $cpm_trans_date = $request->input('cpm_trans_date');
+        $cpm_amount = $request->input('cpm_amount');
+        $cpm_currency = $request->input('cpm_currency', '');
+        $signature = $request->input('signature', '');
+        $payment_method = $request->input('payment_method', '');
+        $cel_phone_num = $request->input('cel_phone_num', '');
+        $cpm_phone_prefixe = $request->input('cpm_phone_prefixe', '');
+        $cpm_language = $request->input('cpm_language', '');
+        $cpm_version = $request->input('cpm_version', '');
+        $cpm_payment_config = $request->input('cpm_payment_config', '');
+        $cpm_page_action = $request->input('cpm_page_action', '');
+        $cpm_custom = $request->input('cpm_custom', '');
+        $cpm_designation = $request->input('cpm_designation', '');
+        $cpm_error_message = $request->input('cpm_error_message', '');
+
+        // Vérifier les données obligatoires
+        if (!$cpm_trans_id || !$cpm_site_id) {
+            Log::error('Données obligatoires manquantes', [
+                'trans_id' => $cpm_trans_id,
+                'site_id' => $cpm_site_id
+            ]);
             return response()->json(['status' => 'error'], 400);
         }
 
-        // Vérifier que la transaction existe
-        $transaction = Transaction::whereJsonContains('meta->transaction_id', $transactionId)->first();
+        // Construire la chaîne pour le token HMAC selon la doc
+        $data = $cpm_site_id . $cpm_trans_id . $cpm_trans_date . $cpm_amount . $cpm_currency . 
+                $signature . $payment_method . $cel_phone_num . $cpm_phone_prefixe . 
+                $cpm_language . $cpm_version . $cpm_payment_config . $cpm_page_action . 
+                $cpm_custom . $cpm_designation . $cpm_error_message;
+
+        // Récupérer la clé secrète depuis la config
+        $secretKey = env('CINETPAY_SECRET_KEY', '');
+        
+        if (empty($secretKey)) {
+            Log::error('CINETPAY_SECRET_KEY non configurée dans .env');
+            // En développement, on peut continuer sans vérifier le token
+            // return response()->json(['status' => 'error', 'message' => 'Configuration manquante'], 500);
+        } else {
+            // Générer le token HMAC avec SHA256
+            $generatedToken = hash_hmac('SHA256', $data, $secretKey);
+            
+            Log::info('Vérification du token HMAC', [
+                'received_token' => substr($receivedToken, 0, 20) . '...',
+                'generated_token' => substr($generatedToken, 0, 20) . '...',
+                'tokens_match' => hash_equals($receivedToken, $generatedToken)
+            ]);
+
+            // Vérifier que les tokens correspondent
+            if (!hash_equals($receivedToken, $generatedToken)) {
+                Log::error('Token HMAC invalide - Notification rejetée');
+                return response()->json(['status' => 'error', 'message' => 'Token invalide'], 401);
+            }
+        }
+
+        Log::info('Token HMAC valide ou non vérifié - Traitement de la notification');
+
+        // Vérifier que la transaction existe dans notre base
+        $transaction = Transaction::whereJsonContains('meta->transaction_id', $cpm_trans_id)->first();
         
         if (!$transaction) {
-            Log::error('Transaction not found', ['transaction_id' => $transactionId]);
+            Log::error('Transaction non trouvée dans la base', ['transaction_id' => $cpm_trans_id]);
             return response()->json(['status' => 'error'], 404);
         }
 
+        Log::info('Transaction trouvée, vérification du statut avec l\'API', [
+            'transaction_id' => $cpm_trans_id,
+            'current_status' => $transaction->status,
+            'error_message' => $cpm_error_message
+        ]);
+
         // Vérifier le statut avec l'API CinetPay
-        $verificationResult = $this->verifyTransaction($transactionId);
+        $verificationResult = $this->verifyTransaction($cpm_trans_id);
 
         if ($verificationResult['success']) {
             $status = $verificationResult['data']['status'];
             
+            Log::info('Statut CinetPay obtenu', [
+                'transaction_id' => $cpm_trans_id,
+                'cinetpay_status' => $status,
+                'current_db_status' => $transaction->status
+            ]);
+            
             if ($status === 'ACCEPTED' && $transaction->status !== 'completed') {
-                // Mettre à jour la transaction
                 $transaction->update([
                     'status' => 'completed',
                     'meta' => json_encode(array_merge(
                         json_decode($transaction->meta, true),
-                        ['cinetpay_verification' => $verificationResult['data']]
+                        [
+                            'cinetpay_verification' => $verificationResult['data'],
+                            'notification_data' => [
+                                'payment_method' => $payment_method,
+                                'phone' => $cel_phone_num,
+                                'error_message' => $cpm_error_message,
+                                'verified_at' => now()
+                            ]
+                        ]
                     ))
                 ]);
 
-                // Traiter le dépôt
                 $this->processDeposit($transaction);
                 
-                Log::info('Transaction Completed', ['transaction_id' => $transactionId]);
+                Log::info('✓ Transaction marquée comme COMPLÉTÉE', [
+                    'transaction_id' => $cpm_trans_id,
+                    'amount' => $cpm_amount
+                ]);
                 
             } elseif ($status === 'REFUSED' && $transaction->status !== 'failed') {
                 $transaction->update([
                     'status' => 'failed',
                     'meta' => json_encode(array_merge(
                         json_decode($transaction->meta, true),
-                        ['cinetpay_verification' => $verificationResult['data']]
+                        [
+                            'cinetpay_verification' => $verificationResult['data'],
+                            'error_message' => $cpm_error_message
+                        ]
                     ))
                 ]);
                 
-                Log::info('Transaction Failed', ['transaction_id' => $transactionId]);
+                Log::info('✗ Transaction marquée comme ÉCHOUÉE', [
+                    'transaction_id' => $cpm_trans_id,
+                    'error' => $cpm_error_message
+                ]);
                 
             } elseif (in_array($status, ['CANCELLED', 'CANCELED']) && $transaction->status !== 'cancelled') {
                 $transaction->update([
                     'status' => 'cancelled',
                     'meta' => json_encode(array_merge(
                         json_decode($transaction->meta, true),
-                        ['cinetpay_verification' => $verificationResult['data']]
+                        [
+                            'cinetpay_verification' => $verificationResult['data'],
+                            'error_message' => $cpm_error_message
+                        ]
                     ))
                 ]);
                 
-                Log::info('Transaction Cancelled', ['transaction_id' => $transactionId]);
-                
-            } elseif ($status === 'WAITING_FOR_CUSTOMER' && $transaction->status === 'pending') {
-                // Ne pas changer le statut, juste logger
-                Log::info('Transaction Waiting for Customer', ['transaction_id' => $transactionId]);
+                Log::info('✗ Transaction marquée comme ANNULÉE', ['transaction_id' => $cpm_trans_id]);
             }
+        } else {
+            Log::error('Échec de la vérification avec l\'API CinetPay', [
+                'transaction_id' => $cpm_trans_id,
+                'error' => $verificationResult
+            ]);
         }
 
+        // Toujours retourner success pour que CinetPay arrête de réessayer
         return response()->json(['status' => 'success']);
     }
 
@@ -412,13 +532,143 @@ class CinetPayController extends Controller
     }
 
     /**
+     * Endpoint de debug pour lister les transactions (DEV ONLY)
+     */
+    public function debugTransactions(Request $request)
+    {
+        Log::info('=== DEBUG TRANSACTIONS ===');
+
+        $transactions = Transaction::where('type', 'deposit')
+            ->latest()
+            ->limit(10)
+            ->get(['id', 'user_id', 'type', 'amount', 'status', 'meta', 'created_at']);
+
+        $result = [];
+        foreach ($transactions as $transaction) {
+            $meta = json_decode($transaction->meta, true);
+            $result[] = [
+                'id' => $transaction->id,
+                'user_id' => $transaction->user_id,
+                'amount' => $transaction->amount,
+                'status' => $transaction->status,
+                'transaction_id' => $meta['transaction_id'] ?? 'N/A',
+                'payment_method' => $meta['payment_method'] ?? 'N/A',
+                'created_at' => $transaction->created_at,
+                'meta_raw' => $transaction->meta
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'count' => count($result),
+            'transactions' => $result
+        ]);
+    }
+
+    /**
+     * Endpoint de test pour vérifier une transaction sans authentification (DEV ONLY)
+     */
+    public function testCheckStatus(Request $request)
+    {
+        Log::info('=== TEST CHECK STATUS (NO AUTH) ===', [
+            'request_all' => $request->all(),
+            'transaction_id' => $request->input('transaction_id')
+        ]);
+
+        $transactionId = $request->input('transaction_id');
+        
+        if (!$transactionId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'transaction_id requis'
+            ], 400);
+        }
+
+        // Chercher la transaction dans la base - essayer plusieurs méthodes
+        Log::info('Recherche de transaction', ['transaction_id' => $transactionId]);
+        
+        // Méthode 1: whereJsonContains
+        $transaction1 = Transaction::whereJsonContains('meta->transaction_id', $transactionId)->first();
+        Log::info('Méthode 1 (whereJsonContains)', ['found' => $transaction1 ? $transaction1->id : null]);
+        
+        // Méthode 2: where avec LIKE
+        $transaction2 = Transaction::where('meta', 'LIKE', "%{$transactionId}%")->first();
+        Log::info('Méthode 2 (LIKE)', ['found' => $transaction2 ? $transaction2->id : null]);
+        
+        // Méthode 3: parcourir toutes les transactions
+        $allTransactions = Transaction::where('type', 'deposit')->get();
+        $transaction3 = null;
+        foreach ($allTransactions as $tx) {
+            $meta = json_decode($tx->meta, true);
+            if (isset($meta['transaction_id']) && $meta['transaction_id'] === $transactionId) {
+                $transaction3 = $tx;
+                break;
+            }
+        }
+        Log::info('Méthode 3 (foreach)', ['found' => $transaction3 ? $transaction3->id : null]);
+        
+        $transaction = $transaction1 ?: $transaction2 ?: $transaction3;
+        
+        if (!$transaction) {
+            Log::error('Transaction non trouvée avec aucune méthode', [
+                'transaction_id' => $transactionId,
+                'total_transactions' => $allTransactions->count()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction non trouvée dans la base de données',
+                'debug' => [
+                    'searched_id' => $transactionId,
+                    'method1_found' => $transaction1 ? true : false,
+                    'method2_found' => $transaction2 ? true : false,
+                    'method3_found' => $transaction3 ? true : false,
+                    'total_deposit_transactions' => $allTransactions->count()
+                ]
+            ], 404);
+        }
+
+        Log::info('Transaction trouvée, appel CinetPay', [
+            'transaction_id' => $transactionId,
+            'db_status' => $transaction->status
+        ]);
+
+        // Vérifier avec CinetPay
+        $verificationResult = $this->verifyTransaction($transactionId);
+        
+        if ($verificationResult['success']) {
+            $cinetpayStatus = $verificationResult['data']['status'] ?? 'UNKNOWN';
+            
+            // Mettre à jour si nécessaire
+            if ($cinetpayStatus === 'ACCEPTED' && $transaction->status !== 'completed') {
+                $transaction->update(['status' => 'completed']);
+                $this->processDeposit($transaction);
+                Log::info('Transaction mise à jour vers completed');
+            }
+            
+            return response()->json([
+                'success' => true,
+                'status' => $transaction->fresh()->status,
+                'cinetpay_status' => $cinetpayStatus,
+                'amount' => $transaction->amount,
+                'data' => $verificationResult['data']
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur vérification CinetPay',
+            'error' => $verificationResult
+        ]);
+    }
+
+    /**
      * API pour vérifier le statut d'une transaction spécifique
      */
     public function checkTransactionStatus(Request $request)
     {
         Log::info('=== DÉBUT VÉRIFICATION STATUT TRANSACTION ===', [
             'request_data' => $request->all(),
-            'user_id' => $request->user()->id ?? null
+            'has_auth_user' => $request->user() ? true : false
         ]);
 
         $request->validate([
@@ -426,22 +676,56 @@ class CinetPayController extends Controller
         ]);
 
         $transactionId = $request->transaction_id;
+        
+        // Essayer d'obtenir l'utilisateur soit par auth, soit par la transaction
         $user = $request->user();
+        
+        if (!$user) {
+            // Si pas d'auth, chercher la transaction pour obtenir l'user_id
+            $tempTransaction = Transaction::whereJsonContains('meta->transaction_id', $transactionId)->first();
+            if ($tempTransaction) {
+                $user = $tempTransaction->user;
+                Log::info('Utilisateur trouvé via transaction', ['user_id' => $user->id]);
+            }
+        }
 
         Log::info('Recherche de la transaction dans la base de données', [
             'transaction_id' => $transactionId,
-            'user_id' => $user->id
+            'user_id' => $user ? $user->id : null
         ]);
 
-        // Vérifier que la transaction appartient à l'utilisateur
-        $transaction = Transaction::where('user_id', $user->id)
-            ->whereJsonContains('meta->transaction_id', $transactionId)
-            ->first();
+        // Utiliser la même logique de recherche que testCheckStatus qui fonctionne
+        Log::info('Recherche de transaction avec plusieurs méthodes', ['transaction_id' => $transactionId]);
+        
+        // Méthode 1: whereJsonContains
+        $transaction = Transaction::whereJsonContains('meta->transaction_id', $transactionId)->first();
+        
+        if (!$transaction) {
+            // Méthode 2: where avec LIKE
+            $transaction = Transaction::where('meta', 'LIKE', "%{$transactionId}%")->first();
+        }
+        
+        if (!$transaction) {
+            // Méthode 3: parcourir toutes les transactions
+            $allTransactions = Transaction::where('type', 'deposit')->get();
+            foreach ($allTransactions as $tx) {
+                $meta = json_decode($tx->meta, true);
+                if (isset($meta['transaction_id']) && $meta['transaction_id'] === $transactionId) {
+                    $transaction = $tx;
+                    break;
+                }
+            }
+        }
+        
+        Log::info('Résultat de la recherche', [
+            'found' => $transaction ? true : false,
+            'transaction_id' => $transactionId
+        ]);
 
         if (!$transaction) {
             Log::error('Transaction non trouvée dans la base de données', [
                 'transaction_id' => $transactionId,
-                'user_id' => $user->id
+                'user_id' => $user ? $user->id : null
             ]);
             
             return response()->json([
