@@ -127,6 +127,25 @@ Route::prefix('v1')->group(function () {
                 return response()->json(['success' => true, 'message' => 'CinetPay API accessible']);
             });
         });
+
+        // Transferts
+        Route::prefix('transfer')->group(function () {
+            Route::post('internal', [TransactionController::class, 'transferToUser']);
+            Route::post('external', [CinetPayController::class, 'initiateWithdrawal']);
+            Route::post('search-user', [TransactionController::class, 'searchUser']);
+            Route::get('operators', function() {
+                return response()->json([
+                    'success' => true,
+                    'operators' => [
+                        ['code' => 'MTN', 'name' => 'MTN Mobile Money', 'country' => 'CM'],
+                        ['code' => 'ORANGE', 'name' => 'Orange Money', 'country' => 'CM'],
+                        ['code' => 'MOOV', 'name' => 'Moov Money', 'country' => 'CM'],
+                        ['code' => 'WAVECI', 'name' => 'Wave Côte d\'Ivoire', 'country' => 'CI'],
+                        ['code' => 'WAVESN', 'name' => 'Wave Sénégal', 'country' => 'SN'],
+                    ]
+                ]);
+            });
+        });
         
         // Endpoint pour simuler un paiement réussi (test uniquement)
         Route::post('test-payment-success', function (Request $request) {

@@ -16,6 +16,8 @@ class CinetPayController extends Controller
     protected $siteId;
     protected $notifyUrl;
     protected $returnUrl;
+    protected $transferApiUrl;
+    protected $transferPassword;
 
     public function __construct()
     {
@@ -24,6 +26,10 @@ class CinetPayController extends Controller
         // URLs de callback - en développement, utilisez ngrok pour les notifications
         $this->notifyUrl = env('CINETPAY_NOTIFY_URL', 'http://192.168.1.135:8001/api/v1/cinetpay/notify');
         $this->returnUrl = 'http://192.168.1.135:8001/api/v1/cinetpay/return';
+        
+        // Configuration pour l'API de transfert
+        $this->transferApiUrl = 'https://client.cinetpay.com/v1';
+        $this->transferPassword = '12345678'; // Mot de passe API CinetPay
     }
 
     /**
@@ -903,7 +909,7 @@ class CinetPayController extends Controller
         }
 
         // Initier le transfert
-        $transferResult = $this->initiateTransfer($token, $contactData['contact_id'], $amount, $request->operator);
+        $transferResult = $this->initiateTransfer($token, $contactData, $request->phone_number, $amount, $request->operator);
         
         if ($transferResult['success']) {
             // Créer la transaction de retrait
@@ -943,25 +949,42 @@ class CinetPayController extends Controller
     private function authenticateCinetPay()
     {
         try {
-            $response = Http::post('https://client.cinetpay.com/v1/auth/login', [
+            Log::info('=== DÉBUT AUTHENTIFICATION CINETPAY ===', [
                 'apikey' => $this->apiKey,
-                'password' => env('CINETPAY_PASSWORD', '')
+                'url' => 'https://client.cinetpay.com/v1/auth/login'
+            ]);
+
+            $response = Http::asForm()->post('https://client.cinetpay.com/v1/auth/login', [
+                'apikey' => $this->apiKey,
+                'password' => $this->transferPassword
+            ]);
+
+            Log::info('CinetPay Auth Response', [
+                'status' => $response->status(),
+                'body' => $response->body()
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
-                return [
-                    'success' => true,
-                    'token' => $data['token']
-                ];
+                
+                if (isset($data['code']) && $data['code'] == 0 && isset($data['data']['token'])) {
+                    Log::info('Authentication réussie', ['token_received' => true]);
+                    return [
+                        'success' => true,
+                        'token' => $data['data']['token']
+                    ];
+                }
             }
 
-            Log::error('CinetPay Auth Failed', $response->json());
-            return ['success' => false];
+            Log::error('CinetPay Auth Failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
+            return ['success' => false, 'error' => $response->json()];
 
         } catch (Exception $e) {
             Log::error('CinetPay Auth Exception', ['message' => $e->getMessage()]);
-            return ['success' => false];
+            return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 
@@ -971,76 +994,237 @@ class CinetPayController extends Controller
     private function createOrGetContact($token, $phoneNumber, $user)
     {
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $token
-            ])->post('https://client.cinetpay.com/v1/transfer/contact', [
+            Log::info('=== CRÉATION CONTACT CINETPAY ===', [
                 'phone' => $phoneNumber,
-                'name' => $user->last_name ?? 'User',
-                'surname' => $user->first_name ?? 'Formaneo',
-                'email' => $user->email
+                'user_id' => $user->id
+            ]);
+
+            // Extraire le préfixe et le numéro selon le format CinetPay
+            $cleanPhone = preg_replace('/[^0-9]/', '', $phoneNumber);
+            
+            // Vérifier que le numéro n'est pas vide ou ne contient que le préfixe
+            if (empty($cleanPhone) || $cleanPhone === '237') {
+                Log::error('Numéro de téléphone invalide ou manquant', [
+                    'original_phone' => $phoneNumber,
+                    'cleaned_phone' => $cleanPhone
+                ]);
+                return [
+                    'success' => false, 
+                    'error' => 'Numéro de téléphone requis et valide'
+                ];
+            }
+            
+            // Gérer les formats de téléphone camerounais
+            if (strlen($cleanPhone) == 9 && !str_starts_with($cleanPhone, '237')) {
+                $prefix = '237';
+                $phone = $cleanPhone;
+            } elseif (str_starts_with($cleanPhone, '237') && strlen($cleanPhone) > 3) {
+                $prefix = '237';
+                $phone = substr($cleanPhone, 3);
+            } else {
+                $prefix = '237'; // Par défaut Cameroun
+                $phone = $cleanPhone;
+            }
+
+            $contactData = [
+                [
+                    'prefix' => $prefix,
+                    'phone' => $phone,
+                    'name' => $user->last_name ?? 'User',
+                    'surname' => $user->first_name ?? 'Formaneo',
+                    'email' => $user->email
+                ]
+            ];
+
+            Log::info('Contact data to send', $contactData);
+
+            $response = Http::asForm()->post("https://client.cinetpay.com/v1/transfer/contact?token={$token}&lang=fr", [
+                'data' => json_encode($contactData)
+            ]);
+
+            Log::info('CinetPay Contact Response', [
+                'status' => $response->status(),
+                'body' => $response->body()
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
-                return [
-                    'success' => true,
-                    'contact_id' => $data['contact_id'] ?? $data['id']
-                ];
+                
+                if (isset($data['code']) && $data['code'] == 0 && isset($data['data'])) {
+                    // CinetPay peut retourner soit data[0] soit data[0][0] selon les cas
+                    $contactInfo = null;
+                    
+                    if (isset($data['data'][0][0])) {
+                        // Cas: data[[{...}]]
+                        $contactInfo = $data['data'][0][0];
+                        Log::info('Structure double tableau détectée', ['contact_info' => $contactInfo]);
+                    } elseif (isset($data['data'][0])) {
+                        // Cas: data[{...}]
+                        $contactInfo = $data['data'][0];
+                        Log::info('Structure simple tableau détectée', ['contact_info' => $contactInfo]);
+                    }
+                    
+                    if ($contactInfo && isset($contactInfo['status'])) {
+                        $status = $contactInfo['status'];
+                        
+                        // Traiter comme succès si le contact est créé ou existe déjà
+                        if ($status === 'success' || $status === 'ERROR_PHONE_ALREADY_MY_CONTACT') {
+                            Log::info('Contact traité avec succès', [
+                                'status' => $status,
+                                'message' => $status === 'ERROR_PHONE_ALREADY_MY_CONTACT' ? 'Contact existe déjà' : 'Contact créé'
+                            ]);
+                            
+                            return [
+                                'success' => true,
+                                'contact_data' => $contactInfo,
+                                'lot' => $contactInfo['lot'],
+                                'contact_status' => $status
+                            ];
+                        } else {
+                            Log::error('Status de contact non géré', [
+                                'status' => $status,
+                                'contact_info' => $contactInfo
+                            ]);
+                        }
+                    } else {
+                        Log::error('Contact info invalide - pas de status', [
+                            'contact_info' => $contactInfo,
+                            'full_data' => $data
+                        ]);
+                    }
+                }
             }
 
-            Log::error('CinetPay Contact Creation Failed', $response->json());
-            return ['success' => false];
+            Log::error('CinetPay Contact Creation Failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
+            return ['success' => false, 'error' => $response->json()];
 
         } catch (Exception $e) {
             Log::error('CinetPay Contact Exception', ['message' => $e->getMessage()]);
-            return ['success' => false];
+            return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 
     /**
      * Initier un transfert CinetPay
      */
-    private function initiateTransfer($token, $contactId, $amount, $operator)
+    private function initiateTransfer($token, $contactData, $phoneNumber, $amount, $operator)
     {
         try {
+            Log::info('=== INITIATION TRANSFERT CINETPAY ===', [
+                'amount' => $amount,
+                'operator' => $operator,
+                'phone' => $phoneNumber
+            ]);
+
             // Vérifier d'abord le solde
-            $balanceResponse = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $token
-            ])->post('https://client.cinetpay.com/v1/transfer/check/balance');
+            $balanceResponse = Http::get("https://client.cinetpay.com/v1/transfer/check/balance?token={$token}&lang=fr");
+            
+            Log::info('Balance check response', [
+                'status' => $balanceResponse->status(),
+                'body' => $balanceResponse->body()
+            ]);
 
             if ($balanceResponse->successful()) {
                 $balanceData = $balanceResponse->json();
-                $availableBalance = $balanceData['balance'] ?? 0;
+                if (isset($balanceData['code']) && $balanceData['code'] == 0) {
+                    $availableBalance = $balanceData['data']['available'] ?? 0;
+                    
+                    Log::info('Solde CinetPay', [
+                        'available' => $availableBalance,
+                        'amount_requested' => $amount
+                    ]);
 
-                if ($availableBalance < $amount) {
-                    return [
-                        'success' => false,
-                        'message' => 'Solde CinetPay insuffisant pour effectuer ce retrait'
-                    ];
+                    if ($availableBalance < $amount) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Solde CinetPay insuffisant pour effectuer ce retrait'
+                        ], 400);
+                    }
                 }
             }
 
+            // Extraire les infos du contact
+            $cleanPhone = preg_replace('/[^0-9]/', '', $phoneNumber);
+            if (strlen($cleanPhone) == 9 && !str_starts_with($cleanPhone, '237')) {
+                $prefix = '237';
+                $phone = $cleanPhone;
+            } elseif (str_starts_with($cleanPhone, '237')) {
+                $prefix = '237';
+                $phone = substr($cleanPhone, 3);
+            } else {
+                $prefix = '237';
+                $phone = $cleanPhone;
+            }
+
+            // Préparer les données de transfert selon la documentation
+            $transferData = [
+                [
+                    'prefix' => $prefix,
+                    'phone' => $phone,
+                    'amount' => (int) $amount,
+                    'client_transaction_id' => 'TRANSFER_' . time() . '_' . random_int(1000, 9999),
+                    'notify_url' => $this->notifyUrl . '/transfer',
+                    'payment_method' => $operator
+                ]
+            ];
+
+            Log::info('Transfer data to send', $transferData);
+
             // Effectuer le transfert
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $token
-            ])->post('https://client.cinetpay.com/v1/transfer/money/send/contact', [
-                'contact_id' => $contactId,
-                'amount' => $amount,
-                'notify' => 1
+            $response = Http::asForm()->post("https://client.cinetpay.com/v1/transfer/money/send/contact?token={$token}&lang=fr", [
+                'data' => json_encode($transferData)
+            ]);
+
+            Log::info('CinetPay Transfer Response', [
+                'status' => $response->status(),
+                'body' => $response->body()
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
-                return [
-                    'success' => true,
-                    'transfer_id' => $data['transfer_id'] ?? $data['transaction_id']
-                ];
+                
+                if (isset($data['code']) && $data['code'] == 0 && isset($data['data'])) {
+                    // CinetPay peut retourner soit data[0] soit data[0][0] selon les cas
+                    $transferInfo = null;
+                    
+                    if (isset($data['data'][0][0])) {
+                        // Cas: data[[{...}]]
+                        $transferInfo = $data['data'][0][0];
+                        Log::info('Structure double tableau détectée pour transfert', ['transfer_info' => $transferInfo]);
+                    } elseif (isset($data['data'][0])) {
+                        // Cas: data[{...}]
+                        $transferInfo = $data['data'][0];
+                        Log::info('Structure simple tableau détectée pour transfert', ['transfer_info' => $transferInfo]);
+                    }
+                    
+                    if ($transferInfo && isset($transferInfo['status']) && $transferInfo['status'] === 'success') {
+                        return [
+                            'success' => true,
+                            'transfer_id' => $transferInfo['transaction_id'],
+                            'client_transaction_id' => $transferInfo['client_transaction_id'],
+                            'lot' => $transferInfo['lot'],
+                            'treatment_status' => $transferInfo['treatment_status']
+                        ];
+                    } else {
+                        Log::error('Transfer info invalide ou status non-success', [
+                            'transfer_info' => $transferInfo,
+                            'full_data' => $data
+                        ]);
+                    }
+                }
             }
 
-            Log::error('CinetPay Transfer Failed', $response->json());
+            Log::error('CinetPay Transfer Failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
             return [
                 'success' => false,
-                'message' => $response->json()['message'] ?? 'Erreur lors du transfert'
+                'message' => $response->json()['message'] ?? 'Erreur lors du transfert',
+                'error' => $response->json()
             ];
 
         } catch (Exception $e) {
@@ -1089,38 +1273,55 @@ class CinetPayController extends Controller
         }
 
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $authResponse['token']
-            ])->post('https://client.cinetpay.com/v1/transfer/check/money', [
-                'transaction_id' => $transferId
+            $response = Http::get("https://client.cinetpay.com/v1/transfer/check/money?token={$authResponse['token']}&lang=fr&transaction_id={$transferId}");
+
+            Log::info('CinetPay Transfer Check Response', [
+                'status' => $response->status(),
+                'body' => $response->body()
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
-                $transferStatus = $data['status'] ?? 'UNKNOWN';
+                
+                if (isset($data['code']) && $data['code'] == 0 && isset($data['data'][0])) {
+                    $transferInfo = $data['data'][0];
+                    $transferStatus = $transferInfo['treatment_status'] ?? 'UNKNOWN';
+                    $sendingStatus = $transferInfo['sending_status'] ?? 'UNKNOWN';
 
-                // Mettre à jour le statut de la transaction
-                if ($transferStatus === 'SUCCESS' && $transaction->status !== 'completed') {
-                    $transaction->update(['status' => 'completed']);
-                } elseif ($transferStatus === 'FAILED' && $transaction->status !== 'failed') {
-                    $transaction->update(['status' => 'failed']);
-                    // Rembourser l'utilisateur
-                    $user->increment('balance', abs($transaction->amount));
+                    Log::info('Transfer status details', [
+                        'treatment_status' => $transferStatus,
+                        'sending_status' => $sendingStatus,
+                        'transfer_valid' => $transferInfo['transfer_valid'] ?? null
+                    ]);
+
+                    // Mettre à jour le statut de la transaction selon le treatment_status
+                    if ($transferStatus === 'VAL' && $sendingStatus === 'CONFIRM' && $transaction->status !== 'completed') {
+                        $transaction->update(['status' => 'completed']);
+                        Log::info('Transfer completed successfully');
+                    } elseif (in_array($transferStatus, ['REJ', 'FAILED']) && $transaction->status !== 'failed') {
+                        $transaction->update(['status' => 'failed']);
+                        // Rembourser l'utilisateur
+                        $user->increment('balance', abs($transaction->amount));
+                        Log::info('Transfer failed, user refunded');
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'status' => $transaction->fresh()->status,
+                        'transfer_status' => $transferStatus,
+                        'sending_status' => $sendingStatus,
+                        'amount' => abs($transaction->amount),
+                        'created_at' => $transaction->created_at,
+                        'transfer_details' => $transferInfo
+                    ]);
                 }
-
-                return response()->json([
-                    'success' => true,
-                    'status' => $transaction->fresh()->status,
-                    'transfer_status' => $transferStatus,
-                    'amount' => abs($transaction->amount),
-                    'created_at' => $transaction->created_at
-                ]);
             }
 
             return response()->json([
                 'success' => false,
                 'message' => 'Impossible de vérifier le statut',
-                'current_status' => $transaction->status
+                'current_status' => $transaction->status,
+                'response' => $response->json()
             ], 500);
 
         } catch (Exception $e) {
