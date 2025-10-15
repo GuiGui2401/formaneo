@@ -210,41 +210,88 @@ class CinetPayController extends Controller
      */
     public function verifyTransaction($transactionId)
     {
+        Log::info('>>> Appel API CinetPay payment/check', [
+            'transaction_id' => $transactionId,
+            'api_key_set' => !empty($this->apiKey),
+            'site_id_set' => !empty($this->siteId)
+        ]);
+
         try {
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-                'User-Agent' => 'Formaneo-App/1.0'
-            ])->post('https://api-checkout.cinetpay.com/v2/payment/check', [
+            $requestData = [
                 'apikey' => $this->apiKey,
                 'site_id' => $this->siteId,
                 'transaction_id' => $transactionId
+            ];
+
+            Log::info('Données envoyées à CinetPay', [
+                'url' => 'https://api-checkout.cinetpay.com/v2/payment/check',
+                'transaction_id' => $transactionId,
+                'site_id' => $this->siteId
+            ]);
+
+            $response = Http::timeout(30)->withHeaders([
+                'Content-Type' => 'application/json',
+                'User-Agent' => 'Formaneo-App/1.0'
+            ])->post('https://api-checkout.cinetpay.com/v2/payment/check', $requestData);
+
+            $statusCode = $response->status();
+            $responseBody = $response->body();
+            $responseData = $response->json();
+
+            Log::info('Réponse CinetPay reçue', [
+                'status_code' => $statusCode,
+                'response_code' => $responseData['code'] ?? null,
+                'response_message' => $responseData['message'] ?? null,
+                'has_data' => isset($responseData['data']),
+                'full_response' => $responseData
             ]);
 
             if ($response->successful()) {
-                $responseData = $response->json();
-                
-                if ($responseData['code'] === '00') {
+                if (isset($responseData['code']) && $responseData['code'] === '00') {
+                    Log::info('✓ Vérification CinetPay réussie', [
+                        'transaction_id' => $transactionId,
+                        'status' => $responseData['data']['status'] ?? 'UNKNOWN',
+                        'amount' => $responseData['data']['amount'] ?? null,
+                        'payment_method' => $responseData['data']['payment_method'] ?? null
+                    ]);
+
                     return [
                         'success' => true,
                         'data' => $responseData['data']
                     ];
+                } else {
+                    Log::warning('CinetPay - Code de retour non valide', [
+                        'transaction_id' => $transactionId,
+                        'code' => $responseData['code'] ?? 'NO_CODE',
+                        'message' => $responseData['message'] ?? 'NO_MESSAGE'
+                    ]);
                 }
+            } else {
+                Log::error('CinetPay - Réponse HTTP non réussie', [
+                    'transaction_id' => $transactionId,
+                    'status_code' => $statusCode,
+                    'response_body' => substr($responseBody, 0, 500)
+                ]);
             }
 
-            Log::error('CinetPay Verification Failed', [
-                'transaction_id' => $transactionId,
-                'response' => $response->json()
-            ]);
-
-            return ['success' => false];
+            return [
+                'success' => false,
+                'error' => $responseData['message'] ?? 'Vérification échouée',
+                'code' => $responseData['code'] ?? null
+            ];
 
         } catch (Exception $e) {
-            Log::error('CinetPay Verification Exception', [
+            Log::error('Exception lors de la vérification CinetPay', [
                 'transaction_id' => $transactionId,
-                'message' => $e->getMessage()
+                'error_message' => $e->getMessage(),
+                'error_class' => get_class($e),
+                'trace' => substr($e->getTraceAsString(), 0, 1000)
             ]);
 
-            return ['success' => false];
+            return [
+                'success' => false,
+                'error' => 'Exception: ' . $e->getMessage()
+            ];
         }
     }
 
@@ -369,6 +416,11 @@ class CinetPayController extends Controller
      */
     public function checkTransactionStatus(Request $request)
     {
+        Log::info('=== DÉBUT VÉRIFICATION STATUT TRANSACTION ===', [
+            'request_data' => $request->all(),
+            'user_id' => $request->user()->id ?? null
+        ]);
+
         $request->validate([
             'transaction_id' => 'required|string'
         ]);
@@ -376,79 +428,139 @@ class CinetPayController extends Controller
         $transactionId = $request->transaction_id;
         $user = $request->user();
 
+        Log::info('Recherche de la transaction dans la base de données', [
+            'transaction_id' => $transactionId,
+            'user_id' => $user->id
+        ]);
+
         // Vérifier que la transaction appartient à l'utilisateur
         $transaction = Transaction::where('user_id', $user->id)
             ->whereJsonContains('meta->transaction_id', $transactionId)
             ->first();
 
         if (!$transaction) {
+            Log::error('Transaction non trouvée dans la base de données', [
+                'transaction_id' => $transactionId,
+                'user_id' => $user->id
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Transaction non trouvée'
             ], 404);
         }
 
-        Log::info('Checking transaction status', [
+        Log::info('Transaction trouvée dans la base de données', [
             'transaction_id' => $transactionId,
-            'current_status' => $transaction->status
+            'current_status' => $transaction->status,
+            'amount' => $transaction->amount,
+            'type' => $transaction->type,
+            'created_at' => $transaction->created_at
         ]);
 
         // Vérifier le statut avec CinetPay
+        Log::info('Appel de l\'API CinetPay pour vérification', [
+            'transaction_id' => $transactionId
+        ]);
+        
         $verificationResult = $this->verifyTransaction($transactionId);
         
-        Log::info('CinetPay verification result', $verificationResult);
+        Log::info('Résultat de la vérification CinetPay', [
+            'success' => $verificationResult['success'] ?? false,
+            'data' => $verificationResult['data'] ?? null,
+            'full_result' => $verificationResult
+        ]);
 
         if ($verificationResult['success']) {
             $cinetpayStatus = $verificationResult['data']['status'];
             $currentStatus = $transaction->status;
+            $paymentMethod = $verificationResult['data']['payment_method'] ?? 'UNKNOWN';
+            $operatorId = $verificationResult['data']['operator_id'] ?? null;
 
-            Log::info('Status comparison', [
+            Log::info('Comparaison des statuts', [
                 'cinetpay_status' => $cinetpayStatus,
-                'current_status' => $currentStatus
+                'current_db_status' => $currentStatus,
+                'payment_method' => $paymentMethod,
+                'operator_id' => $operatorId
             ]);
 
             // Mettre à jour le statut si nécessaire
             if ($cinetpayStatus === 'ACCEPTED' && $currentStatus !== 'completed') {
+                Log::info('Transaction ACCEPTED - Mise à jour vers completed', [
+                    'transaction_id' => $transactionId
+                ]);
+                
                 $transaction->update([
                     'status' => 'completed',
                     'meta' => json_encode(array_merge(
                         json_decode($transaction->meta, true),
-                        ['cinetpay_verification' => $verificationResult['data']]
+                        [
+                            'cinetpay_verification' => $verificationResult['data'],
+                            'payment_method' => $paymentMethod,
+                            'operator_id' => $operatorId,
+                            'verified_at' => now()
+                        ]
                     ))
                 ]);
-                $this->processDeposit($transaction);
-                $currentStatus = 'completed';
                 
-                Log::info('Transaction marked as completed', [
+                Log::info('Traitement du dépôt', [
                     'transaction_id' => $transactionId,
                     'amount' => $transaction->amount
                 ]);
                 
+                $this->processDeposit($transaction);
+                $currentStatus = 'completed';
+                
+                Log::info('Transaction marquée comme COMPLÉTÉE avec succès', [
+                    'transaction_id' => $transactionId,
+                    'amount' => $transaction->amount,
+                    'new_balance' => $transaction->user->fresh()->balance
+                ]);
+                
             } elseif ($cinetpayStatus === 'REFUSED' && $currentStatus !== 'failed') {
+                Log::info('Transaction REFUSED - Mise à jour vers failed', [
+                    'transaction_id' => $transactionId
+                ]);
+                
                 $transaction->update(['status' => 'failed']);
                 $currentStatus = 'failed';
                 
-                Log::info('Transaction marked as failed', ['transaction_id' => $transactionId]);
-                
             } elseif (in_array($cinetpayStatus, ['CANCELLED', 'CANCELED']) && $currentStatus !== 'cancelled') {
+                Log::info('Transaction CANCELLED - Mise à jour vers cancelled', [
+                    'transaction_id' => $transactionId
+                ]);
+                
                 $transaction->update(['status' => 'cancelled']);
                 $currentStatus = 'cancelled';
                 
-                Log::info('Transaction marked as cancelled', ['transaction_id' => $transactionId]);
+            } else {
+                Log::info('Aucune mise à jour nécessaire', [
+                    'transaction_id' => $transactionId,
+                    'cinetpay_status' => $cinetpayStatus,
+                    'current_status' => $currentStatus
+                ]);
             }
+
+            Log::info('=== FIN VÉRIFICATION - SUCCÈS ===', [
+                'transaction_id' => $transactionId,
+                'final_status' => $currentStatus,
+                'cinetpay_status' => $cinetpayStatus
+            ]);
 
             return response()->json([
                 'success' => true,
                 'status' => $currentStatus,
                 'cinetpay_status' => $cinetpayStatus,
+                'payment_method' => $paymentMethod,
                 'amount' => $transaction->amount,
                 'created_at' => $transaction->created_at,
                 'debug' => $verificationResult['data']
             ]);
         } else {
-            Log::error('CinetPay verification failed', [
+            Log::error('=== ÉCHEC VÉRIFICATION CINETPAY ===', [
                 'transaction_id' => $transactionId,
-                'error' => $verificationResult
+                'error' => $verificationResult,
+                'current_db_status' => $transaction->status
             ]);
             
             return response()->json([
