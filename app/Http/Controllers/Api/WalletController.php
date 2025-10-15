@@ -107,7 +107,7 @@ class WalletController extends Controller
     public function deposit(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:500'
+            'amount' => 'required|numeric|min:100'
         ]);
 
         $user = $request->user();

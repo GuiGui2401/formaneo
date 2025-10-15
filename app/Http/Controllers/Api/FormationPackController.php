@@ -178,10 +178,16 @@ class FormationPackController extends Controller
             return;
         }
 
-        // Commission niveau 1 (1000 FCFA pour premier achat)
-        $level1Commission = 1000.0;
-        
-        // Vérifier si c'est le premier achat de ce filleul
+        // Déterminer le montant de la commission en fonction du nombre d'affiliés
+        $commissionAmount = $referrer->total_affiliates >= config('app.affiliate_premium_threshold', 100)
+            ? config('app.commission_premium', 2500)
+            : config('app.commission_basic', 2000);
+
+        // Incrémenter le solde du parrain
+        $referrer->increment('balance', $commissionAmount);
+        $referrer->increment('total_commissions', $commissionAmount);
+
+        // Vérifier si c'est le premier achat du filleul pour incrémenter le compteur
         $isFirstPurchase = $user->transactions()
             ->where('type', 'purchase')
             ->count() === 1;
