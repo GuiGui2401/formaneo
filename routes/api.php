@@ -148,8 +148,8 @@ Route::prefix('v1')->group(function () {
                 return response()->json([
                     'success' => true,
                     'operators' => [
+                        ['code' => 'AUTO', 'name' => 'Détection automatique', 'country' => 'CM'],
                         ['code' => 'MTN', 'name' => 'MTN Mobile Money', 'country' => 'CM'],
-                        ['code' => 'ORANGE', 'name' => 'Orange Money', 'country' => 'CM'],
                         ['code' => 'MOOV', 'name' => 'Moov Money', 'country' => 'CM'],
                         ['code' => 'WAVECI', 'name' => 'Wave Côte d\'Ivoire', 'country' => 'CI'],
                         ['code' => 'WAVESN', 'name' => 'Wave Sénégal', 'country' => 'SN'],

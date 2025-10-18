@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Jobs\ProcessCinetPayTransfer;
 use Exception;
 
 class CinetPayController extends Controller
@@ -29,7 +30,7 @@ class CinetPayController extends Controller
         
         // Configuration pour l'API de transfert
         $this->transferApiUrl = 'https://client.cinetpay.com/v1';
-        $this->transferPassword = '12345678'; // Mot de passe API CinetPay
+        $this->transferPassword = '12345678'; // Mot de passe API CinetPay pour les transferts uniquement
     }
 
     /**
@@ -38,7 +39,7 @@ class CinetPayController extends Controller
     public function initiateDepositPayment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:100|multiple_of:5',
+            'amount' => 'required|numeric|min:500|multiple_of:5',
             'phone_number' => 'nullable|string',
         ]);
 
@@ -485,7 +486,7 @@ class CinetPayController extends Controller
     public function testPayment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:100|multiple_of:5',
+            'amount' => 'required|numeric|min:500|multiple_of:5',
             'phone' => 'required|string'
         ]);
 
@@ -863,15 +864,25 @@ class CinetPayController extends Controller
     }
 
     /**
-     * Initier un retrait via l'API de transfert CinetPay
+     * Initier un retrait via l'API de transfert CinetPay (avec option asynchrone)
      */
     public function initiateWithdrawal(Request $request)
     {
+        // Vérifier si on doit utiliser le mode asynchrone (via queue)
+        $useQueue = $request->input('async', false) || env('CINETPAY_USE_QUEUE', true);
+        
+        if ($useQueue) {
+            return $this->initiateWithdrawalAsync($request);
+        }
+        
         $request->validate([
-            'amount' => 'required|numeric|min:100|multiple_of:5',
+            'amount' => 'required|numeric|min:500|multiple_of:5',
             'phone_number' => 'required|string',
-            'operator' => 'required|string|in:WAVECI,WAVESN,MOOV,MTN,ORANGE'
+            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN'
         ]);
+        
+        // Utiliser l'opérateur fourni ou null pour auto-détection
+        $operator = $request->input('operator', null);
 
         $user = $request->user();
         $amount = $request->amount;
@@ -909,14 +920,14 @@ class CinetPayController extends Controller
         }
 
         // Initier le transfert
-        $transferResult = $this->initiateTransfer($token, $contactData, $request->phone_number, $amount, $request->operator);
+        $transferResult = $this->initiateTransfer($token, $contactData, $request->phone_number, $amount, $operator);
         
         if ($transferResult['success']) {
             // Créer la transaction de retrait
             $transaction = $user->transactions()->create([
                 'type' => 'withdrawal',
                 'amount' => -$amount,
-                'description' => "Retrait vers {$request->operator} - {$request->phone_number}",
+                'description' => "Retrait vers " . ($operator ?: 'Auto') . " - {$request->phone_number}",
                 'status' => 'pending',
                 'meta' => json_encode([
                     'operator' => $request->operator,
@@ -936,9 +947,25 @@ class CinetPayController extends Controller
                 'new_balance' => $user->balance
             ]);
         } else {
+            // Gestion spécifique pour les erreurs de timeout
+            if (isset($transferResult['is_timeout']) && $transferResult['is_timeout']) {
+                Log::warning('Timeout lors du transfert CinetPay', [
+                    'user_id' => $user->id,
+                    'amount' => $amount,
+                    'phone' => $request->phone_number
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Le serveur CinetPay met trop de temps à répondre. Veuillez réessayer dans quelques instants.',
+                    'is_timeout' => true
+                ], 504); // 504 Gateway Timeout
+            }
+            
             return response()->json([
                 'success' => false,
-                'message' => $transferResult['message'] ?? 'Erreur lors de l\'initiation du retrait'
+                'message' => $transferResult['message'] ?? 'Erreur lors de l\'initiation du retrait',
+                'details' => $transferResult['error_details'] ?? null
             ], 500);
         }
     }
@@ -954,7 +981,7 @@ class CinetPayController extends Controller
                 'url' => 'https://client.cinetpay.com/v1/auth/login'
             ]);
 
-            $response = Http::asForm()->post('https://client.cinetpay.com/v1/auth/login', [
+            $response = Http::timeout(45)->asForm()->post('https://client.cinetpay.com/v1/auth/login', [
                 'apikey' => $this->apiKey,
                 'password' => $this->transferPassword
             ]);
@@ -1038,7 +1065,7 @@ class CinetPayController extends Controller
 
             Log::info('Contact data to send', $contactData);
 
-            $response = Http::asForm()->post("https://client.cinetpay.com/v1/transfer/contact?token={$token}&lang=fr", [
+            $response = Http::timeout(45)->asForm()->post("https://client.cinetpay.com/v1/transfer/contact?token={$token}&lang=fr", [
                 'data' => json_encode($contactData)
             ]);
 
@@ -1108,19 +1135,22 @@ class CinetPayController extends Controller
     }
 
     /**
-     * Initier un transfert CinetPay
+     * Initier un transfert CinetPay avec système de retry
      */
-    private function initiateTransfer($token, $contactData, $phoneNumber, $amount, $operator)
+    private function initiateTransfer($token, $contactData, $phoneNumber, $amount, $operator, $retryCount = 0)
     {
+        $maxRetries = 2;
+        
         try {
             Log::info('=== INITIATION TRANSFERT CINETPAY ===', [
                 'amount' => $amount,
                 'operator' => $operator,
-                'phone' => $phoneNumber
+                'phone' => $phoneNumber,
+                'retry_attempt' => $retryCount
             ]);
 
             // Vérifier d'abord le solde
-            $balanceResponse = Http::get("https://client.cinetpay.com/v1/transfer/check/balance?token={$token}&lang=fr");
+            $balanceResponse = Http::timeout(30)->get("https://client.cinetpay.com/v1/transfer/check/balance?token={$token}&lang=fr");
             
             Log::info('Balance check response', [
                 'status' => $balanceResponse->status(),
@@ -1166,15 +1196,23 @@ class CinetPayController extends Controller
                     'phone' => $phone,
                     'amount' => (int) $amount,
                     'client_transaction_id' => 'TRANSFER_' . time() . '_' . random_int(1000, 9999),
-                    'notify_url' => $this->notifyUrl . '/transfer',
-                    'payment_method' => $operator
+                    'notify_url' => $this->notifyUrl . '/transfer'
                 ]
             ];
+            
+            // Ajouter payment_method seulement si c'est un opérateur supporté
+            if ($operator && in_array($operator, ['WAVECI', 'WAVESN', 'MOOV', 'MTN'])) {
+                $transferData[0]['payment_method'] = $operator;
+            }
+            // Pour null/vide, ORANGE et autres, laisser CinetPay auto-détecter
 
             Log::info('Transfer data to send', $transferData);
 
-            // Effectuer le transfert
-            $response = Http::asForm()->post("https://client.cinetpay.com/v1/transfer/money/send/contact?token={$token}&lang=fr", [
+            // Effectuer le transfert avec timeout progressif selon le retry
+            $timeout = 30 + ($retryCount * 15); // 30s, 45s, 60s
+            Log::info("Tentative de transfert avec timeout de {$timeout} secondes");
+            
+            $response = Http::timeout($timeout)->asForm()->post("https://client.cinetpay.com/v1/transfer/money/send/contact?token={$token}&lang=fr", [
                 'data' => json_encode($transferData)
             ]);
 
@@ -1228,11 +1266,129 @@ class CinetPayController extends Controller
             ];
 
         } catch (Exception $e) {
-            Log::error('CinetPay Transfer Exception', ['message' => $e->getMessage()]);
+            Log::error('CinetPay Transfer Exception', [
+                'message' => $e->getMessage(),
+                'retry_count' => $retryCount
+            ]);
+            
+            // Gestion spécifique des erreurs de timeout avec retry
+            if (str_contains($e->getMessage(), 'cURL error 28') || str_contains($e->getMessage(), 'timed out')) {
+                if ($retryCount < $maxRetries) {
+                    $nextAttempt = $retryCount + 1;
+                    Log::warning("Timeout détecté, nouvelle tentative ({$nextAttempt}/{$maxRetries})");
+                    
+                    // Attendre un peu avant de réessayer
+                    sleep(2);
+                    
+                    // Obtenir un nouveau token si nécessaire (le token expire après 5 minutes)
+                    $authResponse = $this->authenticateCinetPay();
+                    if (!$authResponse['success']) {
+                        return [
+                            'success' => false,
+                            'message' => 'Impossible de renouveler l\'authentification CinetPay',
+                            'is_timeout' => true
+                        ];
+                    }
+                    
+                    // Réessayer avec le nouveau token
+                    return $this->initiateTransfer($authResponse['token'], $contactData, $phoneNumber, $amount, $operator, $retryCount + 1);
+                }
+                
+                return [
+                    'success' => false,
+                    'message' => 'Le serveur CinetPay ne répond pas après plusieurs tentatives. Veuillez réessayer plus tard.',
+                    'is_timeout' => true,
+                    'retry_exhausted' => true
+                ];
+            }
+            
             return [
                 'success' => false,
-                'message' => 'Erreur technique lors du transfert'
+                'message' => 'Erreur technique lors du transfert',
+                'error_details' => $e->getMessage()
             ];
+        }
+    }
+
+    /**
+     * Initier un retrait de façon asynchrone (via queue)
+     */
+    private function initiateWithdrawalAsync(Request $request)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:500|multiple_of:5',
+            'phone_number' => 'required|string',
+            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN'
+        ]);
+        
+        // Utiliser l'opérateur fourni ou null pour auto-détection
+        $operator = $request->input('operator', null);
+
+        $user = $request->user();
+        $amount = $request->amount;
+
+        // Vérifier le solde disponible
+        $availableForWithdrawal = max(0, $user->balance - 1000);
+        
+        if ($amount > $availableForWithdrawal) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Solde insuffisant pour ce retrait'
+            ], 400);
+        }
+
+        try {
+            // Créer la transaction en attente
+            $transaction = $user->transactions()->create([
+                'type' => 'withdrawal',
+                'amount' => -$amount,
+                'description' => "Retrait vers " . ($operator ?: 'Auto') . " - {$request->phone_number}",
+                'status' => 'queued', // Status spécial pour les transferts en queue
+                'meta' => json_encode([
+                    'operator' => $operator,
+                    'phone_number' => $request->phone_number,
+                    'queued_at' => now(),
+                    'async_mode' => true
+                ])
+            ]);
+
+            // Déduire le montant du solde immédiatement
+            $user->decrement('balance', $amount);
+
+            // Dispatcher le job
+            ProcessCinetPayTransfer::dispatch(
+                $transaction, 
+                $user, 
+                $amount, 
+                $request->phone_number, 
+                $request->operator
+            );
+
+            Log::info('Transfert CinetPay ajouté à la queue', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $user->id,
+                'amount' => $amount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Votre retrait est en cours de traitement. Vous recevrez une notification une fois terminé.',
+                'transaction_id' => $transaction->id,
+                'status' => 'queued',
+                'new_balance' => $user->balance,
+                'processing_mode' => 'asynchronous'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Erreur lors de la création du job de transfert', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'initiation du retrait. Veuillez réessayer.'
+            ], 500);
         }
     }
 
@@ -1273,7 +1429,7 @@ class CinetPayController extends Controller
         }
 
         try {
-            $response = Http::get("https://client.cinetpay.com/v1/transfer/check/money?token={$authResponse['token']}&lang=fr&transaction_id={$transferId}");
+            $response = Http::timeout(30)->get("https://client.cinetpay.com/v1/transfer/check/money?token={$authResponse['token']}&lang=fr&transaction_id={$transferId}");
 
             Log::info('CinetPay Transfer Check Response', [
                 'status' => $response->status(),
