@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FormationPackController;
 use App\Http\Controllers\Api\FormationController;
@@ -125,10 +127,70 @@ Route::prefix('v1')->group(function () {
             Route::post('{id}/progress', [ChallengeController::class, 'updateProgress']);
         });
 
-        // CinetPay (uniquement pour les dépôts de fonds)
+        // CinetPay (dépôts et retraits)
         Route::prefix('cinetpay')->group(function () {
             Route::post('deposit/initiate', [CinetPayController::class, 'initiateDepositPayment']);
+            Route::post('withdrawal/initiate', [CinetPayController::class, 'initiateWithdrawal']);
             Route::post('test', [CinetPayController::class, 'testPayment']);
+            Route::get('debug', [CinetPayController::class, 'debugConfig']);
+            Route::post('check-withdrawal', [CinetPayController::class, 'checkWithdrawalStatus']);
+            Route::get('ping', function () {
+                return response()->json(['success' => true, 'message' => 'CinetPay API accessible']);
+            });
+        });
+
+        // Transferts
+        Route::prefix('transfer')->group(function () {
+            Route::post('internal', [TransactionController::class, 'transferToUser']);
+            Route::post('external', [CinetPayController::class, 'initiateWithdrawal']);
+            Route::post('search-user', [TransactionController::class, 'searchUser']);
+            Route::get('operators', function() {
+                return response()->json([
+                    'success' => true,
+                    'operators' => [
+                        ['code' => 'MTN', 'name' => 'MTN Mobile Money', 'country' => 'CM'],
+                        ['code' => 'ORANGE', 'name' => 'Orange Money', 'country' => 'CM'],
+                        ['code' => 'MOOV', 'name' => 'Moov Money', 'country' => 'CM'],
+                        ['code' => 'WAVECI', 'name' => 'Wave Côte d\'Ivoire', 'country' => 'CI'],
+                        ['code' => 'WAVESN', 'name' => 'Wave Sénégal', 'country' => 'SN'],
+                    ]
+                ]);
+            });
+        });
+        
+        // Endpoint pour simuler un paiement réussi (test uniquement)
+        Route::post('test-payment-success', function (Request $request) {
+            $request->validate([
+                'transaction_id' => 'required|string'
+            ]);
+            
+            $transactionId = $request->transaction_id;
+            $transaction = \App\Models\Transaction::whereJsonContains('meta->transaction_id', $transactionId)->first();
+            
+            if (!$transaction) {
+                return response()->json(['success' => false, 'message' => 'Transaction non trouvée']);
+            }
+            
+            // Simuler une transaction réussie
+            $transaction->update(['status' => 'completed']);
+            
+            // Traiter le dépôt
+            if ($transaction->type === 'deposit') {
+                $user = $transaction->user;
+                $user->increment('balance', $transaction->amount);
+                Log::info('Test Payment Success', [
+                    'transaction_id' => $transactionId,
+                    'user_id' => $user->id,
+                    'amount' => $transaction->amount,
+                    'new_balance' => $user->fresh()->balance
+                ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Paiement marqué comme réussi',
+                'transaction' => $transaction->fresh()
+            ]);
         });
 
         // Transactions
@@ -149,5 +211,56 @@ Route::prefix('v1')->group(function () {
     Route::prefix('cinetpay')->group(function () {
         Route::post('notify', [CinetPayController::class, 'handleNotification']);
         Route::get('notify', [CinetPayController::class, 'handleNotification']); // Pour test GET
+        Route::get('return', [CinetPayController::class, 'handleReturn']); // return_url
+        Route::post('return', [CinetPayController::class, 'handleReturn']); // return_url POST
+        Route::post('test-check-status', [CinetPayController::class, 'testCheckStatus']); // Test sans auth
+        Route::get('debug-transactions', [CinetPayController::class, 'debugTransactions']); // Debug transactions
+        Route::post('check-status', [CinetPayController::class, 'checkTransactionStatus']); // Temporairement public
+        Route::get('ping', function () {
+            return response()->json(['success' => true, 'message' => 'CinetPay API accessible', 'timestamp' => now()]);
+        });
+        Route::get('debug', [CinetPayController::class, 'debugConfig']);
+        Route::post('test-simple', function () {
+            $transactionId = 'TEST' . time() . random_int(1000, 9999);
+            $data = [
+                'apikey' => '45213166268af015b7d2734.50726534',
+                'site_id' => '105905750',
+                'transaction_id' => $transactionId,
+                'amount' => 100,
+                'currency' => 'XAF',
+                'description' => 'Test paiement Formaneo',
+                'channels' => 'ALL',
+                'notify_url' => 'http://10.146.233.108:8001/api/v1/cinetpay/notify',
+                'return_url' => 'http://10.146.233.108:8001/api/v1/cinetpay/return',
+                'customer_name' => 'Test',
+                'customer_surname' => 'User',
+                'customer_email' => 'test@formaneo.com',
+                'customer_phone_number' => '+237658895572',
+                'customer_address' => 'Douala Centre',
+                'customer_city' => 'Douala',
+                'customer_country' => 'CM',
+                'customer_state' => 'CM',
+                'customer_zip_code' => '00237',
+                'lang' => 'fr'
+            ];
+            
+            try {
+                $response = Http::timeout(30)->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'User-Agent' => 'Formaneo-App/1.0'
+                ])->post('https://api-checkout.cinetpay.com/v2/payment', $data);
+                
+                return response()->json([
+                    'request' => $data,
+                    'status' => $response->status(),
+                    'response' => $response->json()
+                ]);
+            } catch (Exception $e) {
+                return response()->json([
+                    'error' => $e->getMessage(),
+                    'request' => $data
+                ]);
+            }
+        });
     });
 });

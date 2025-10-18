@@ -222,9 +222,9 @@ class EbookController extends Controller
         }
 
         // Déterminer le montant de la commission en fonction du nombre d'affiliés
-        $commissionAmount = $referrer->total_affiliates >= config('app.affiliate_premium_threshold', 10)
-            ? config('app.commission_premium', 1000)
-            : config('app.commission_basic', 500);
+        $commissionAmount = $referrer->total_affiliates >= config('app.affiliate_premium_threshold', 100)
+            ? config('app.commission_premium', 2500)
+            : config('app.commission_basic', 2000);
 
         // Incrémenter le solde du parrain
         $referrer->increment('balance', $commissionAmount);
