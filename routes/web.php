@@ -11,6 +11,8 @@ use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\EbookController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\BannerController;
+use App\Models\FormationVideo;
 
 /*
 |--------------------------------------------------------------------------
@@ -74,6 +76,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/{formation}/modules', [FormationController::class, 'storeModule'])->name('modules.store');
             Route::put('/modules/{module}', [FormationController::class, 'updateModule'])->name('modules.update');
             Route::delete('/modules/{module}', [FormationController::class, 'destroyModule'])->name('modules.destroy');
+            // Gestion des vidéos
+            Route::post('/{formation}/videos', [FormationController::class, 'storeVideo'])->name('videos.store');
+            Route::put('/videos/{video}', [FormationController::class, 'updateVideo'])->name('videos.update');
+            Route::delete('/videos/{video}', [FormationController::class, 'destroyVideo'])->name('videos.destroy');
         });
 
         // Gestion des ebooks
@@ -116,5 +122,28 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // Gestion des produits (pour la boutique)
         Route::resource('products', \App\Http\Controllers\Admin\ProductController::class);
+
+        // Gestion des défis
+        Route::prefix('challenges')->name('challenges.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\ChallengeController::class, 'index'])->name('index');
+            Route::get('/create', [\App\Http\Controllers\Admin\ChallengeController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\Admin\ChallengeController::class, 'store'])->name('store');
+            Route::get('/{challenge}', [\App\Http\Controllers\Admin\ChallengeController::class, 'show'])->name('show');
+            Route::get('/{challenge}/edit', [\App\Http\Controllers\Admin\ChallengeController::class, 'edit'])->name('edit');
+            Route::put('/{challenge}', [\App\Http\Controllers\Admin\ChallengeController::class, 'update'])->name('update');
+            Route::delete('/{challenge}', [\App\Http\Controllers\Admin\ChallengeController::class, 'destroy'])->name('destroy');
+            Route::patch('/{challenge}/toggle-active', [\App\Http\Controllers\Admin\ChallengeController::class, 'toggleActive'])->name('toggle-active');
+        });
+
+        // Gestion des bannières promotionnelles
+        Route::prefix('banners')->name('banners.')->group(function () {
+            Route::get('/', [BannerController::class, 'index'])->name('index');
+            Route::get('/create', [BannerController::class, 'create'])->name('create');
+            Route::post('/', [BannerController::class, 'store'])->name('store');
+            Route::get('/{banner}/edit', [BannerController::class, 'edit'])->name('edit');
+            Route::put('/{banner}', [BannerController::class, 'update'])->name('update');
+            Route::delete('/{banner}', [BannerController::class, 'destroy'])->name('destroy');
+            Route::post('/{banner}/toggle-status', [BannerController::class, 'toggleStatus'])->name('toggle-status');
+        });
     });
 });

@@ -18,19 +18,20 @@ class EbookController extends Controller
             ->get();
 
         $user = $request->user();
+        $purchasedEbookIds = [];
+
         if ($user) {
-            $purchasedEbooks = UserEbook::where('user_id', $user->id)->pluck('ebook_id')->toArray();
-            $ebooks->each(function ($ebook) use ($purchasedEbooks) {
-                $ebook->is_purchased = in_array($ebook->id, $purchasedEbooks);
-            });
-        } else {
-            $ebooks->each(function ($ebook) {
-                $ebook->is_purchased = false;
-            });
+            $purchasedEbookIds = UserEbook::where('user_id', $user->id)->pluck('ebook_id')->toArray();
         }
 
+        $ebooksData = $ebooks->map(function ($ebook) use ($purchasedEbookIds) {
+            $ebookArray = $ebook->toArray();
+            $ebookArray['is_purchased'] = in_array($ebook->id, $purchasedEbookIds);
+            return $ebookArray;
+        });
+
         return response()->json([
-            'ebooks' => $ebooks
+            'ebooks' => $ebooksData
         ]);
     }
 
@@ -198,6 +199,9 @@ class EbookController extends Controller
             ])
         ]);
 
+        // Traiter la commission pour le parrain si applicable
+        $this->processReferralCommission($user, $ebook->price);
+
         return response()->json([
             'success' => true,
             'message' => 'Ebook acheté avec succès',
@@ -275,19 +279,20 @@ class EbookController extends Controller
         $ebooks = $ebooksQuery->orderBy('created_at', 'desc')->get();
 
         $user = $request->user();
+        $purchasedEbookIds = [];
+
         if ($user) {
-            $purchasedEbooks = UserEbook::where('user_id', $user->id)->pluck('ebook_id')->toArray();
-            $ebooks->each(function ($ebook) use ($purchasedEbooks) {
-                $ebook->is_purchased = in_array($ebook->id, $purchasedEbooks);
-            });
-        } else {
-            $ebooks->each(function ($ebook) {
-                $ebook->is_purchased = false;
-            });
+            $purchasedEbookIds = UserEbook::where('user_id', $user->id)->pluck('ebook_id')->toArray();
         }
 
+        $ebooksData = $ebooks->map(function ($ebook) use ($purchasedEbookIds) {
+            $ebookArray = $ebook->toArray();
+            $ebookArray['is_purchased'] = in_array($ebook->id, $purchasedEbookIds);
+            return $ebookArray;
+        });
+
         return response()->json([
-            'ebooks' => $ebooks
+            'ebooks' => $ebooksData
         ]);
     }
 

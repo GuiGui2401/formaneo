@@ -13,6 +13,8 @@ class FormationPackController extends Controller
     // Liste des packs de formations
     public function index(Request $request)
     {
+        $user = $request->user();
+
         $packs = FormationPack::where('is_active', true)
             ->with('formations.modules')
             ->orderBy('is_featured', 'desc')
@@ -20,7 +22,15 @@ class FormationPackController extends Controller
             ->get();
 
         // Formater les données pour correspondre à l'attente du frontend
-        $formattedPacks = $packs->map(function ($pack) {
+        $formattedPacks = $packs->map(function ($pack) use ($user) {
+            // Vérifier si l'utilisateur possède ce pack (seulement si authentifié)
+            $isPurchased = false;
+            if ($user) {
+                $isPurchased = UserPack::where('user_id', $user->id)
+                    ->where('pack_id', $pack->id)
+                    ->exists();
+            }
+
             return [
                 'id' => $pack->id,
                 'name' => $pack->name,
@@ -38,6 +48,7 @@ class FormationPackController extends Controller
                 'formations_count' => $pack->formations->count(),
                 'formations' => $pack->formations,
                 'is_featured' => $pack->is_featured,
+                'is_purchased' => $isPurchased,
                 'created_at' => $pack->created_at,
             ];
         });
@@ -166,7 +177,7 @@ class FormationPackController extends Controller
         ]);
     }
 
-    // Traiter la commission de parrainage
+    // Traiter la commission de parrainage (à chaque paiement)
     private function processReferralCommission($user, $purchaseAmount)
     {
         if (!$user->referred_by) {
@@ -189,49 +200,26 @@ class FormationPackController extends Controller
 
         // Vérifier si c'est le premier achat du filleul pour incrémenter le compteur
         $isFirstPurchase = $user->transactions()
-            ->where('type', 'purchase')
+            ->whereIn('type', ['pack_purchase', 'ebook_purchase', 'product_purchase'])
             ->count() === 1;
 
         if ($isFirstPurchase) {
-            $referrer->increment('balance', $level1Commission);
-            $referrer->increment('total_commissions', $level1Commission);
-
-            $referrer->transactions()->create([
-                'type' => 'commission',
-                'amount' => $level1Commission,
-                'description' => "Commission niveau 1 - Premier achat de {$user->name}",
-                'status' => 'completed',
-                'meta' => json_encode([
-                    'referral_id' => $user->id,
-                    'referral_name' => $user->name,
-                    'level' => 1,
-                    'purchase_amount' => $purchaseAmount
-                ])
-            ]);
-
-            // Commission niveau 2 si le parrain a lui-même un parrain
-            if ($referrer->referred_by) {
-                $level2Referrer = \App\Models\User::find($referrer->referred_by);
-                if ($level2Referrer) {
-                    $level2Commission = 500.0;
-                    
-                    $level2Referrer->increment('balance', $level2Commission);
-                    $level2Referrer->increment('total_commissions', $level2Commission);
-
-                    $level2Referrer->transactions()->create([
-                        'type' => 'commission',
-                        'amount' => $level2Commission,
-                        'description' => "Commission niveau 2 - Achat de sous-filleul {$user->name}",
-                        'status' => 'completed',
-                        'meta' => json_encode([
-                            'referral_id' => $user->id,
-                            'referral_name' => $user->name,
-                            'level' => 2,
-                            'purchase_amount' => $purchaseAmount
-                        ])
-                    ]);
-                }
-            }
+            $referrer->increment('total_affiliates');
+            $referrer->increment('monthly_affiliates');
         }
+
+        // Créer une transaction pour la commission
+        $referrer->transactions()->create([
+            'type' => 'affiliate_commission',
+            'amount' => $commissionAmount,
+            'description' => "Commission pour l'achat de {$user->name}",
+            'status' => 'completed',
+            'meta' => json_encode([
+                'referred_user_id' => $user->id,
+                'referred_user_name' => $user->name,
+                'purchase_amount' => $purchaseAmount,
+                'is_first_purchase' => $isFirstPurchase
+            ])
+        ]);
     }
 }

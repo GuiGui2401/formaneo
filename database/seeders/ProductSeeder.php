@@ -16,8 +16,10 @@ class ProductSeeder extends Seeder
      */
     public function run(): void
     {
-        // Clear existing products
+        // Clear existing products with foreign key checks disabled
+        \DB::statement('SET FOREIGN_KEY_CHECKS=0;');
         Product::truncate();
+        \DB::statement('SET FOREIGN_KEY_CHECKS=1;');
 
         // Convert FormationPacks to Products
         $formationPacks = FormationPack::all();

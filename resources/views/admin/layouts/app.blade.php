@@ -226,23 +226,39 @@
                         </li>
 
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.products.*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.products.*') ? 'active' : '' }}"
                                href="{{ route('admin.products.index') }}">
                                 <i class="fas fa-box-open me-2"></i>
                                 Products
                             </a>
                         </li>
-                        
+
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.transactions.*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.challenges.*') ? 'active' : '' }}"
+                               href="{{ route('admin.challenges.index') }}">
+                                <i class="fas fa-trophy me-2"></i>
+                                Défis & Bonus
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.banners.*') ? 'active' : '' }}"
+                               href="{{ route('admin.banners.index') }}">
+                                <i class="fas fa-images me-2"></i>
+                                Bannières Promotionnelles
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.transactions.*') ? 'active' : '' }}"
                                href="{{ route('admin.transactions.index') }}">
                                 <i class="fas fa-money-bill-wave me-2"></i>
                                 Transactions
                             </a>
                         </li>
-                        
+
                         <li class="nav-item">
-                            <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" 
+                            <a class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}"
                                href="{{ route('admin.settings.index') }}">
                                 <i class="fas fa-cog me-2"></i>
                                 Paramètres

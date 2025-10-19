@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FormationPackController;
 use App\Http\Controllers\Api\FormationController;
@@ -12,6 +14,9 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\EbookController;
 use App\Http\Controllers\Api\CinetPayController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ChallengeController;
+use App\Http\Controllers\Api\SupportController;
+use App\Http\Controllers\Api\CartController;
 
 // Routes publiques
 Route::prefix('v1')->group(function () {
@@ -28,21 +33,17 @@ Route::prefix('v1')->group(function () {
         Route::get('/{id}', [ProductController::class, 'show']);
     });
 
-    // Packs de formations publics
-    Route::get('packs', [FormationPackController::class, 'index']);
-    Route::get('packs/{id}', [FormationPackController::class, 'show']);
-
     // Quiz publics
     Route::prefix('quiz')->group(function () {
         Route::get('available', [QuizController::class, 'available']);
     });
 
-    // Ebooks publics
-    Route::prefix('ebooks')->group(function () {
-        Route::get('/', [EbookController::class, 'index']);
-        Route::get('/{id}', [EbookController::class, 'show']);
-        Route::get('/search', [EbookController::class, 'search']);
-        Route::get('/categories', [EbookController::class, 'categories']);
+
+
+    // Support (publique)
+    Route::prefix('support')->group(function () {
+        Route::get('info', [SupportController::class, 'index']);
+        Route::post('request', [SupportController::class, 'submitRequest']);
     });
 
     // Routes authentifiées
@@ -56,6 +57,7 @@ Route::prefix('v1')->group(function () {
 
         // Packs de formations
         Route::prefix('packs')->group(function () {
+            Route::get('/', [FormationPackController::class, 'index']);
             Route::get('{id}', [FormationPackController::class, 'show']);
             Route::post('{id}/purchase', [FormationPackController::class, 'purchase']);
             Route::get('{id}/formations', [FormationPackController::class, 'getFormations']);
@@ -63,15 +65,20 @@ Route::prefix('v1')->group(function () {
 
         // Formations
         Route::prefix('formations')->group(function () {
+            Route::get('my-formations', [FormationController::class, 'getUserFormations']); // Mes formations
+            Route::get('stats', [FormationController::class, 'getProgressStats']);
+            Route::get('certificates', [FormationController::class, 'getCertificates']);
             Route::get('{id}', [FormationController::class, 'show']);
             Route::put('{id}/progress', [FormationController::class, 'updateProgress']);
+            Route::put('videos/{videoId}/progress', [FormationController::class, 'updateVideoProgress']);
             Route::post('modules/{id}/complete', [FormationController::class, 'completeModule']);
-            Route::post('{id}/cashback', [FormationController::class, 'claimCashback']);
-            Route::get('stats', [FormationController::class, 'getProgressStats']);
             Route::get('{id}/certificate', [FormationController::class, 'downloadCertificate']);
             Route::get('{id}/notes', [FormationController::class, 'getNotes']);
             Route::post('{id}/notes', [FormationController::class, 'addNote']);
         });
+
+        // Packs de formations - Cashback
+        Route::post('packs/{packId}/cashback', [FormationController::class, 'claimCashback']);
 
         // Quiz
         Route::prefix('quiz')->group(function () {
@@ -87,8 +94,8 @@ Route::prefix('v1')->group(function () {
             Route::get('list', [AffiliateController::class, 'getAffiliates']);
             Route::get('stats', [AffiliateController::class, 'getDetailedStats']);
             Route::post('generate-link', [AffiliateController::class, 'generateLink']);
-            Route::get('banners', [AffiliateController::class, 'getBanners']);
-            Route::get('banners/{id}/download', [AffiliateController::class, 'downloadBanner']);
+            Route::get('banners', [AffiliateController::class, 'getBanners'])->name('api.affiliate.banners');
+            Route::get('banners/{id}/download', [AffiliateController::class, 'downloadBanner'])->name('api.affiliate.banner.download');
             Route::get('commissions', [AffiliateController::class, 'getCommissions']);
         });
 
@@ -102,6 +109,10 @@ Route::prefix('v1')->group(function () {
 
         // Ebooks
         Route::prefix('ebooks')->group(function () {
+            Route::get('/', [EbookController::class, 'index']);
+            Route::get('/search', [EbookController::class, 'search']);
+            Route::get('/categories', [EbookController::class, 'categories']);
+            Route::get('{id}', [EbookController::class, 'show']);
             Route::post('{id}/purchase', [EbookController::class, 'purchase']);
             Route::get('{id}/download', [EbookController::class, 'download']);
             Route::get('{id}/view', [EbookController::class, 'view']); // Nouvelle route pour consultation en ligne
@@ -116,16 +127,43 @@ Route::prefix('v1')->group(function () {
             Route::post('{id}/progress', [ChallengeController::class, 'updateProgress']);
         });
 
+        // Paramètres de l'application
+        Route::get('settings', function() {
+            return response()->json([
+                'support_email' => \App\Models\AppSetting::get('support_email', 'support@formaneo.com'),
+                'support_phone' => \App\Models\AppSetting::get('support_phone', '+33 1 23 45 67 89'),
+                'support_whatsapp' => \App\Models\AppSetting::get('support_whatsapp', '+33123456789'),
+            ]);
+        });
+
         // CinetPay (dépôts et retraits)
         Route::prefix('cinetpay')->group(function () {
             Route::post('deposit/initiate', [CinetPayController::class, 'initiateDepositPayment']);
             Route::post('withdrawal/initiate', [CinetPayController::class, 'initiateWithdrawal']);
             Route::post('test', [CinetPayController::class, 'testPayment']);
             Route::get('debug', [CinetPayController::class, 'debugConfig']);
-            Route::post('check-status', [CinetPayController::class, 'checkTransactionStatus']);
             Route::post('check-withdrawal', [CinetPayController::class, 'checkWithdrawalStatus']);
             Route::get('ping', function () {
                 return response()->json(['success' => true, 'message' => 'CinetPay API accessible']);
+            });
+        });
+
+        // Transferts
+        Route::prefix('transfer')->group(function () {
+            Route::post('internal', [TransactionController::class, 'transferToUser']);
+            Route::post('external', [CinetPayController::class, 'initiateWithdrawal']);
+            Route::post('search-user', [TransactionController::class, 'searchUser']);
+            Route::get('operators', function() {
+                return response()->json([
+                    'success' => true,
+                    'operators' => [
+                        ['code' => 'AUTO', 'name' => 'Détection automatique', 'country' => 'CM'],
+                        ['code' => 'MTN', 'name' => 'MTN Mobile Money', 'country' => 'CM'],
+                        ['code' => 'MOOV', 'name' => 'Moov Money', 'country' => 'CM'],
+                        ['code' => 'WAVECI', 'name' => 'Wave Côte d\'Ivoire', 'country' => 'CI'],
+                        ['code' => 'WAVESN', 'name' => 'Wave Sénégal', 'country' => 'SN'],
+                    ]
+                ]);
             });
         });
         
@@ -149,8 +187,7 @@ Route::prefix('v1')->group(function () {
             if ($transaction->type === 'deposit') {
                 $user = $transaction->user;
                 $user->increment('balance', $transaction->amount);
-                
-                \Log::info('Test Payment Success', [
+                Log::info('Test Payment Success', [
                     'transaction_id' => $transactionId,
                     'user_id' => $user->id,
                     'amount' => $transaction->amount,
@@ -173,6 +210,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('cart')->group(function () {
             Route::post('add', [CartController::class, 'add']);
             Route::get('/', [CartController::class, 'index']);
+            Route::post('update-quantity', [CartController::class, 'updateQuantity']);
             Route::post('remove', [CartController::class, 'remove']);
             Route::post('checkout', [CartController::class, 'checkout']);
         });
@@ -184,6 +222,9 @@ Route::prefix('v1')->group(function () {
         Route::get('notify', [CinetPayController::class, 'handleNotification']); // Pour test GET
         Route::get('return', [CinetPayController::class, 'handleReturn']); // return_url
         Route::post('return', [CinetPayController::class, 'handleReturn']); // return_url POST
+        Route::post('test-check-status', [CinetPayController::class, 'testCheckStatus']); // Test sans auth
+        Route::get('debug-transactions', [CinetPayController::class, 'debugTransactions']); // Debug transactions
+        Route::post('check-status', [CinetPayController::class, 'checkTransactionStatus']); // Temporairement public
         Route::get('ping', function () {
             return response()->json(['success' => true, 'message' => 'CinetPay API accessible', 'timestamp' => now()]);
         });

@@ -10,7 +10,7 @@ class FormationPack extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name','slug','author','description','thumbnail_url','price','total_duration',
+        'name','slug','author','description','thumbnail_url','price','cashback_amount','total_duration',
         'rating','students_count','is_active','is_featured','order','metadata',
         'is_on_promotion','promotion_price','promotion_starts_at','promotion_ends_at'
     ];
@@ -27,6 +27,11 @@ class FormationPack extends Model
     public function formations()
     {
         return $this->hasMany(Formation::class,'pack_id');
+    }
+
+    public function packProgress()
+    {
+        return $this->hasMany(FormationPackProgress::class, 'pack_id');
     }
 
     /**

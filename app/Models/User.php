@@ -94,6 +94,13 @@ class User extends Authenticatable
                     ->withTimestamps();
     }
 
+    public function challenges()
+    {
+        return $this->belongsToMany(Challenge::class, 'user_challenges')
+                    ->withPivot('progress', 'is_completed', 'completed_at', 'reward_claimed')
+                    ->withTimestamps();
+    }
+
     // Accesseurs
     public function getFormattedBalanceAttribute()
     {

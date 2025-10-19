@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Formation;
 use App\Models\FormationPack;
 use App\Models\FormationModule;
+use App\Models\FormationVideo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -81,7 +82,7 @@ class FormationController extends Controller
 
     public function show(Formation $formation)
     {
-        $formation->load(['pack', 'modules']);
+        $formation->load(['pack', 'modules', 'videos']);
         return view('admin.formations.show', compact('formation'));
     }
 
@@ -200,5 +201,55 @@ class FormationController extends Controller
     {
         $module->delete();
         return back()->with('success', 'Module supprimé avec succès.');
+    }
+
+    // Gestion des vidéos
+    public function storeVideo(Request $request, Formation $formation)
+    {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'video_url' => 'required|url',
+            'duration_minutes' => 'required|integer|min:1',
+            'order' => 'nullable|integer|min:0',
+        ]);
+
+        $video = $formation->videos()->create([
+            'title' => $request->title,
+            'description' => $request->description,
+            'video_url' => $request->video_url,
+            'duration_minutes' => $request->duration_minutes,
+            'order' => $request->order ?? ($formation->videos()->max('order') + 1),
+            'is_active' => true,
+        ]);
+
+        return back()->with('success', 'Vidéo ajoutée avec succès.');
+    }
+
+    public function updateVideo(Request $request, FormationVideo $video)
+    {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'video_url' => 'required|url',
+            'duration_minutes' => 'required|integer|min:1',
+            'order' => 'nullable|integer|min:0',
+        ]);
+
+        $video->update([
+            'title' => $request->title,
+            'description' => $request->description,
+            'video_url' => $request->video_url,
+            'duration_minutes' => $request->duration_minutes,
+            'order' => $request->order ?? $video->order,
+        ]);
+
+        return back()->with('success', 'Vidéo mise à jour avec succès.');
+    }
+
+    public function destroyVideo(FormationVideo $video)
+    {
+        $video->delete();
+        return back()->with('success', 'Vidéo supprimée avec succès.');
     }
 }
