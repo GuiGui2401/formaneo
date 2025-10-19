@@ -106,7 +106,8 @@
                     <div class="col-md-4">
                         <div class="form-group mt-4">
                             <div class="form-check">
-                                <input type="checkbox" class="form-check-input" id="is_active" name="is_active" {{ old('is_active', $challenge->is_active) ? 'checked' : '' }}>
+                                <input type="hidden" name="is_active" value="0">
+                                <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" {{ old('is_active', $challenge->is_active) ? 'checked' : '' }}>
                                 <label class="form-check-label" for="is_active">Actif</label>
                             </div>
                         </div>
