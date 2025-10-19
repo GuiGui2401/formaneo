@@ -524,12 +524,14 @@ class DatabaseSeeder extends Seeder
             'user_id' => $testUser->id,
             'pack_id' => $formationPacks[0]->id,
             'purchased_at' => now()->subDays(25),
+	    'price_paid' => 32000,
         ]);
         
         UserPack::create([
             'user_id' => $testUser->id,
             'pack_id' => $formationPacks[1]->id,
             'purchased_at' => now()->subDays(15),
+	    'price_paid' => 35000,
         ]);
         
         // Certains affiliés ont aussi acheté des packs
@@ -540,6 +542,7 @@ class DatabaseSeeder extends Seeder
                 'user_id' => $user->id,
                 'pack_id' => $formationPacks[$packIndex]->id,
                 'purchased_at' => $user->created_at->addDays(rand(1, 5)),
+		'price_paid' => 32000,
             ]);
         }
     }
