@@ -38,16 +38,17 @@ class DatabaseSeeder extends Seeder
         // Créer un utilisateur de test avec des données réalistes
         $testUser = $this->createTestUser();
         
-        // Créer les packs de formations
-        $formationPacks = $this->createFormationPacks();
-        
+        // Créer les packs de formations avec les vidéos (nouveau système)
+        $this->call(FormationPackSeeder::class);
+        $formationPacks = FormationPack::all();
+
         // Créer des utilisateurs affiliés fictifs
         $affiliates = $this->createAffiliates($testUser);
-        
+
         // Créer des achats de packs pour les utilisateurs
         $this->createUserPacks($testUser, $affiliates, $formationPacks);
-        
-        // Créer les modules de formation (nouvelle table)
+
+        // Créer les modules de formation (ancien système - pour compatibilité)
         $this->createFormationModules($formationPacks);
         
         // Créer le progrès des formations
@@ -71,15 +72,21 @@ class DatabaseSeeder extends Seeder
         // Créer des résultats de quiz
         $this->createQuizResults($testUser, $affiliates, $quizzes);
         
+        $totalVideos = \App\Models\FormationVideo::count();
+        $totalFormations = \App\Models\Formation::count();
+        $totalModules = \App\Models\FormationModule::count();
+        $packCount = $formationPacks->count();
+
         echo "✅ Base de données initialisée avec succès!\n";
         echo "👤 Admin: admin@formaneo.com / Admin@2025\n";
         echo "👤 Test User: david@formaneo.com / Test@2025\n";
         echo "👨‍💼 Super Admin: superadmin@formaneo.com / SuperAdmin@2025\n";
         echo "🔗 Site vitrine: http://cleanestuaire.com/\n";
         echo "📊 Données créées:\n";
-        echo "   - " . count($formationPacks) . " packs de formations\n";
-        echo "   - 42 formations complètes\n";
-        echo "   - 270+ modules\n";
+        echo "   - $packCount packs de formations\n";
+        echo "   - $totalFormations formations complètes\n";
+        echo "   - $totalVideos vidéos de formation (nouveau système)\n";
+        echo "   - $totalModules modules (ancien système)\n";
         echo "   - 12 utilisateurs (dont 10 affiliés)\n";
         echo "   - Quiz et résultats\n";
         echo "   - Progrès et notes des formations\n";

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\SupportInfo;
+use App\Models\Settings;
 use Illuminate\Http\Request;
 
 class SupportController extends Controller
@@ -13,9 +13,26 @@ class SupportController extends Controller
      */
     public function index()
     {
-        $supportInfos = SupportInfo::active()
-            ->ordered()
-            ->get();
+        $supportInfos = [
+            [
+                'type' => 'email',
+                'label' => 'Email',
+                'value' => Settings::getValue('support_email', 'support@formaneo.com'),
+                'order' => 1,
+            ],
+            [
+                'type' => 'phone',
+                'label' => 'Téléphone',
+                'value' => Settings::getValue('support_phone', '+225 XX XX XX XX XX'),
+                'order' => 2,
+            ],
+            [
+                'type' => 'whatsapp',
+                'label' => 'WhatsApp',
+                'value' => Settings::getValue('support_whatsapp', '+225XXXXXXXXXX'),
+                'order' => 3,
+            ],
+        ];
 
         return response()->json([
             'support_info' => $supportInfos,

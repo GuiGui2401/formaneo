@@ -19,10 +19,10 @@ class AffiliateController extends Controller
         $referredUserIds = User::where('referred_by', $user->id)->pluck('id');
 
         // --- Calcul des revenus (commissions) ---
-        $dailyCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereDate('created_at', today())->sum('amount');
-        $weeklyCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])->sum('amount');
-        $monthlyCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount');
-        $yearlyCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereYear('created_at', now()->year)->sum('amount');
+        $todayCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereDate('created_at', today())->sum('amount');
+        $yesterdayCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereDate('created_at', today()->subDay())->sum('amount');
+        $currentMonthCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('amount');
+        $lastMonthCommissions = $user->transactions()->where('type', 'affiliate_commission')->whereMonth('created_at', now()->subMonth()->month)->whereYear('created_at', now()->subMonth()->year)->sum('amount');
         $totalCommissions = $user->transactions()->where('type', 'affiliate_commission')->sum('amount');
 
         // --- Statistiques d'inscriptions par période ---
@@ -92,39 +92,25 @@ class AffiliateController extends Controller
 
         return response()->json([
             'earnings' => [
-                'daily' => $dailyCommissions,
-                'weekly' => $weeklyCommissions,
-                'monthly' => $monthlyCommissions,
-                'yearly' => $yearlyCommissions,
-                'total' => $totalCommissions,
+                'today' => $todayCommissions,
+                'yesterday' => $yesterdayCommissions,
+                'current_month' => $currentMonthCommissions,
+                'last_month' => $lastMonthCommissions,
             ],
             'stats' => [
-                'daily' => [
-                    'registrations' => $dailyRegistrations,
-                    'conversions' => $dailyConversions,
-                    'commissions' => $dailyCommissions,
+                'registrations' => [
+                    'total' => $totalRegistrations,
+                    'monthly' => $monthlyRegistrations,
                 ],
-                'weekly' => [
-                    'registrations' => $weeklyRegistrations,
-                    'conversions' => $weeklyConversions,
-                    'commissions' => $weeklyCommissions,
+                'conversions' => [
+                    'daily' => $dailyConversions,
+                    'weekly' => $weeklyConversions,
+                    'monthly' => $monthlyConversions,
+                    'yearly' => $yearlyConversions,
+                    'total' => $totalConversions,
                 ],
-                'monthly' => [
-                    'registrations' => $monthlyRegistrations,
-                    'conversions' => $monthlyConversions,
-                    'commissions' => $monthlyCommissions,
-                ],
-                'yearly' => [
-                    'registrations' => $yearlyRegistrations,
-                    'conversions' => $yearlyConversions,
-                    'commissions' => $yearlyCommissions,
-                ],
-                'total' => [
-                    'registrations' => $totalRegistrations,
-                    'conversions' => $totalConversions,
-                    'commissions' => $totalCommissions,
-                    'active_affiliates' => $activeAffiliates,
-                ],
+                'active_affiliates' => $activeAffiliates,
+                'total_commissions' => $totalCommissions,
             ],
             'affiliate_link' => $user->affiliate_link,
             'promo_code' => $user->promo_code,
@@ -136,17 +122,29 @@ class AffiliateController extends Controller
     {
         $user = $request->user();
 
-        // --- Top Performers (for MySQL) ---
-        $topPerformers = DB::table('users as affiliates')
-            ->join('transactions', 'affiliates.id', '=', DB::raw("JSON_UNQUOTE(JSON_EXTRACT(transactions.meta, '$.referred_user_id'))"))
-            ->where('transactions.user_id', $user->id)
-            ->where('transactions.type', 'affiliate_commission')
-            ->whereBetween('transactions.created_at', [now()->startOfWeek(), now()->endOfWeek()])
-            ->select('affiliates.name', DB::raw('SUM(transactions.amount) as total_commission'))
-            ->groupBy('affiliates.id', 'affiliates.name')
-            ->orderByDesc('total_commission')
+        // --- Top Performers (utilisateurs référés qui ont généré le plus de commissions cette semaine) ---
+        $topPerformers = User::where('referred_by', $user->id)
+            ->whereHas('transactions', function($query) {
+                $query->where('type', 'pack_purchase')
+                    ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+            })
+            ->withSum(['transactions' => function($query) {
+                $query->where('type', 'pack_purchase')
+                    ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+            }], 'amount')
+            ->orderByDesc('transactions_sum_amount')
             ->take(3)
-            ->get();
+            ->get()
+            ->map(function($affiliate) use ($user) {
+                // Calculer la commission générée (20% du montant total d'achat)
+                $totalPurchase = abs($affiliate->transactions_sum_amount ?? 0);
+                $commission = $totalPurchase * 0.20;
+
+                return [
+                    'name' => $affiliate->name,
+                    'total_commission' => $commission,
+                ];
+            });
 
         // --- Chart Data (for the last 7 days) ---
         $labels = [];
@@ -182,48 +180,35 @@ class AffiliateController extends Controller
     // Fournir les bannières promotionnelles
     public function getBanners(Request $request)
     {
-        $bannerFiles = [
-            'banner_728x90.png',
-            'banner_300x250.png',
-            'banner_160x600.png',
-            'banner_468x60.png',
-        ];
+        $banners = \App\Models\PromotionalBanner::where('is_active', true)
+            ->orderBy('order')
+            ->get()
+            ->map(function($banner) {
+                return [
+                    'id' => $banner->id,
+                    'title' => $banner->title,
+                    'type' => $banner->type,
+                    'file_url' => $banner->file_url ? url('storage/' . $banner->file_path) : null,
+                    'description' => $banner->description,
+                    'download_url' => route('api.affiliate.banner.download', ['id' => $banner->id]),
+                ];
+            });
 
-        $banners = array_map(function ($file, $index) {
-            return [
-                'id' => $index + 1,
-                'name' => $file,
-                'url' => asset('storage/banners/' . $file),
-                'download_url' => route('api.affiliate.banner.download', ['id' => $index + 1]),
-            ];
-        }, $bannerFiles, array_keys($bannerFiles));
-
-        return response()->json($banners);
+        return response()->json(['banners' => $banners]);
     }
 
     // Télécharger une bannière spécifique
     public function downloadBanner(Request $request, $id)
     {
-        $bannerFiles = [
-            'banner_728x90.png',
-            'banner_300x250.png',
-            'banner_160x600.png',
-            'banner_468x60.png',
-        ];
-
-        $bannerId = $id - 1;
-
-        if (!isset($bannerFiles[$bannerId])) {
-            return response()->json(['error' => 'Bannière non trouvée.'], 404);
-        }
-
-        $filePath = storage_path('app/public/banners/' . $bannerFiles[$bannerId]);
+        $banner = \App\Models\PromotionalBanner::findOrFail($id);
+        $filePath = storage_path('app/public/' . $banner->file_path);
 
         if (!file_exists($filePath)) {
-            $this->createGenericBanner($filePath, $bannerFiles[$bannerId]);
+            return response()->json(['error' => 'Fichier de bannière non trouvé.'], 404);
         }
 
-        return response()->download($filePath);
+        $filename = $banner->title . '.' . pathinfo($banner->file_path, PATHINFO_EXTENSION);
+        return response()->download($filePath, $filename);
     }
 
     private function createGenericBanner($path, $filename)

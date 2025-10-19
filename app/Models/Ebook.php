@@ -35,6 +35,8 @@ class Ebook extends Model
         'pages' => 'integer',
     ];
 
+    protected $appends = ['is_free'];
+
     protected static function boot()
     {
         parent::boot();

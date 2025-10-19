@@ -206,21 +206,21 @@
                         <label for="cashback_rate" class="form-label">
                             Taux de cashback (0-1)
                         </label>
-                        <input type="number" 
-                               class="form-control @error('cashback_rate') is-invalid @enderror" 
-                               id="cashback_rate" 
-                               name="cashback_rate" 
-                               value="{{ old('cashback_rate', $settings['cashback_rate']) }}" 
-                               min="0" 
-                               max="1" 
-                               step="0.01" 
+                        <input type="number"
+                               class="form-control @error('cashback_rate') is-invalid @enderror"
+                               id="cashback_rate"
+                               name="cashback_rate"
+                               value="{{ old('cashback_rate', $settings['cashback_rate']) }}"
+                               min="0"
+                               max="1"
+                               step="0.01"
                                required>
                         @error('cashback_rate')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                         <div class="form-text">Pourcentage de cashback à la fin d'une formation (ex: 0.15 = 15%)</div>
                     </div>
-                    
+
                     <div class="alert alert-info">
                         <h6 class="alert-heading">
                             <i class="fas fa-info-circle me-2"></i>
@@ -232,6 +232,66 @@
                             <li>Le cashback est calculé sur le prix d'achat du pack</li>
                             <li>Les quiz gratuits s'appliquent aux nouveaux utilisateurs</li>
                         </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Centre d'aide -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-headset me-2"></i>
+                        Centre d'aide
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="support_email" class="form-label">
+                            Email du support
+                        </label>
+                        <input type="email"
+                               class="form-control @error('support_email') is-invalid @enderror"
+                               id="support_email"
+                               name="support_email"
+                               value="{{ old('support_email', $settings['support_email']) }}"
+                               placeholder="support@formaneo.com">
+                        @error('support_email')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">Email affiché dans l'application mobile</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="support_phone" class="form-label">
+                            Téléphone du support
+                        </label>
+                        <input type="text"
+                               class="form-control @error('support_phone') is-invalid @enderror"
+                               id="support_phone"
+                               name="support_phone"
+                               value="{{ old('support_phone', $settings['support_phone']) }}"
+                               placeholder="+225 XX XX XX XX XX">
+                        @error('support_phone')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="support_whatsapp" class="form-label">
+                            WhatsApp du support
+                        </label>
+                        <input type="text"
+                               class="form-control @error('support_whatsapp') is-invalid @enderror"
+                               id="support_whatsapp"
+                               name="support_whatsapp"
+                               value="{{ old('support_whatsapp', $settings['support_whatsapp']) }}"
+                               placeholder="+225XXXXXXXXXX">
+                        @error('support_whatsapp')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">Numéro WhatsApp pour le support client</div>
                     </div>
                 </div>
             </div>
@@ -320,6 +380,9 @@ function resetToDefaults() {
         document.getElementById('max_withdrawal_amount').value = 1000000;
         document.getElementById('cashback_rate').value = 0.15;
         document.getElementById('free_quizzes_per_user').value = 5;
+        document.getElementById('support_email').value = 'support@formaneo.com';
+        document.getElementById('support_phone').value = '+225 XX XX XX XX XX';
+        document.getElementById('support_whatsapp').value = '+225XXXXXXXXXX';
     }
 }
 

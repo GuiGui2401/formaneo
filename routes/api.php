@@ -33,22 +33,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/{id}', [ProductController::class, 'show']);
     });
 
-    // Packs de formations publics
-    Route::get('packs', [FormationPackController::class, 'index']);
-    Route::get('packs/{id}', [FormationPackController::class, 'show']);
-
     // Quiz publics
     Route::prefix('quiz')->group(function () {
         Route::get('available', [QuizController::class, 'available']);
     });
 
-    // Ebooks publics
-    Route::prefix('ebooks')->group(function () {
-        Route::get('/', [EbookController::class, 'index']);
-        Route::get('/{id}', [EbookController::class, 'show']);
-        Route::get('/search', [EbookController::class, 'search']);
-        Route::get('/categories', [EbookController::class, 'categories']);
-    });
+
 
     // Support (publique)
     Route::prefix('support')->group(function () {
@@ -67,6 +57,7 @@ Route::prefix('v1')->group(function () {
 
         // Packs de formations
         Route::prefix('packs')->group(function () {
+            Route::get('/', [FormationPackController::class, 'index']);
             Route::get('{id}', [FormationPackController::class, 'show']);
             Route::post('{id}/purchase', [FormationPackController::class, 'purchase']);
             Route::get('{id}/formations', [FormationPackController::class, 'getFormations']);
@@ -74,15 +65,20 @@ Route::prefix('v1')->group(function () {
 
         // Formations
         Route::prefix('formations')->group(function () {
+            Route::get('my-formations', [FormationController::class, 'getUserFormations']); // Mes formations
+            Route::get('stats', [FormationController::class, 'getProgressStats']);
+            Route::get('certificates', [FormationController::class, 'getCertificates']);
             Route::get('{id}', [FormationController::class, 'show']);
             Route::put('{id}/progress', [FormationController::class, 'updateProgress']);
+            Route::put('videos/{videoId}/progress', [FormationController::class, 'updateVideoProgress']);
             Route::post('modules/{id}/complete', [FormationController::class, 'completeModule']);
-            Route::post('{id}/cashback', [FormationController::class, 'claimCashback']);
-            Route::get('stats', [FormationController::class, 'getProgressStats']);
             Route::get('{id}/certificate', [FormationController::class, 'downloadCertificate']);
             Route::get('{id}/notes', [FormationController::class, 'getNotes']);
             Route::post('{id}/notes', [FormationController::class, 'addNote']);
         });
+
+        // Packs de formations - Cashback
+        Route::post('packs/{packId}/cashback', [FormationController::class, 'claimCashback']);
 
         // Quiz
         Route::prefix('quiz')->group(function () {
@@ -113,6 +109,10 @@ Route::prefix('v1')->group(function () {
 
         // Ebooks
         Route::prefix('ebooks')->group(function () {
+            Route::get('/', [EbookController::class, 'index']);
+            Route::get('/search', [EbookController::class, 'search']);
+            Route::get('/categories', [EbookController::class, 'categories']);
+            Route::get('{id}', [EbookController::class, 'show']);
             Route::post('{id}/purchase', [EbookController::class, 'purchase']);
             Route::get('{id}/download', [EbookController::class, 'download']);
             Route::get('{id}/view', [EbookController::class, 'view']); // Nouvelle route pour consultation en ligne
@@ -125,6 +125,15 @@ Route::prefix('v1')->group(function () {
             Route::post('{id}/complete', [ChallengeController::class, 'complete']);
             Route::post('{id}/claim', [ChallengeController::class, 'claimReward']);
             Route::post('{id}/progress', [ChallengeController::class, 'updateProgress']);
+        });
+
+        // Paramètres de l'application
+        Route::get('settings', function() {
+            return response()->json([
+                'support_email' => \App\Models\AppSetting::get('support_email', 'support@formaneo.com'),
+                'support_phone' => \App\Models\AppSetting::get('support_phone', '+33 1 23 45 67 89'),
+                'support_whatsapp' => \App\Models\AppSetting::get('support_whatsapp', '+33123456789'),
+            ]);
         });
 
         // CinetPay (dépôts et retraits)

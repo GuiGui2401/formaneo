@@ -35,6 +35,16 @@ class Formation extends Model
         return $this->hasMany(FormationProgress::class);
     }
 
+    public function videos()
+    {
+        return $this->hasMany(FormationVideo::class)->orderBy('order');
+    }
+
+    public function certificates()
+    {
+        return $this->hasMany(FormationCertificate::class);
+    }
+
     // Accesseur pour l'URL de la miniature
     public function getThumbnailUrlAttribute($value)
     {

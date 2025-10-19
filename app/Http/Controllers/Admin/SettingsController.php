@@ -20,6 +20,9 @@ class SettingsController extends Controller
             'max_withdrawal_amount' => Settings::getValue('max_withdrawal_amount', 1000000),
             'cashback_rate' => Settings::getValue('cashback_rate', 0.15),
             'free_quizzes_per_user' => Settings::getValue('free_quizzes_per_user', 5),
+            'support_email' => Settings::getValue('support_email', 'support@formaneo.com'),
+            'support_phone' => Settings::getValue('support_phone', '+225 XX XX XX XX XX'),
+            'support_whatsapp' => Settings::getValue('support_whatsapp', '+225XXXXXXXXXX'),
         ];
 
         return view('admin.settings.index', compact('settings'));
@@ -37,6 +40,9 @@ class SettingsController extends Controller
             'max_withdrawal_amount' => 'required|numeric|min:0',
             'cashback_rate' => 'required|numeric|min:0|max:1',
             'free_quizzes_per_user' => 'required|integer|min:0',
+            'support_email' => 'nullable|email',
+            'support_phone' => 'nullable|string|max:20',
+            'support_whatsapp' => 'nullable|string|max:20',
         ]);
 
         foreach ($request->only([
@@ -48,7 +54,10 @@ class SettingsController extends Controller
             'min_withdrawal_amount',
             'max_withdrawal_amount',
             'cashback_rate',
-            'free_quizzes_per_user'
+            'free_quizzes_per_user',
+            'support_email',
+            'support_phone',
+            'support_whatsapp'
         ]) as $key => $value) {
             Settings::setValue($key, $value);
         }

@@ -13,6 +13,8 @@ class FormationPackController extends Controller
     // Liste des packs de formations
     public function index(Request $request)
     {
+        $user = $request->user();
+
         $packs = FormationPack::where('is_active', true)
             ->with('formations.modules')
             ->orderBy('is_featured', 'desc')
@@ -20,7 +22,15 @@ class FormationPackController extends Controller
             ->get();
 
         // Formater les données pour correspondre à l'attente du frontend
-        $formattedPacks = $packs->map(function ($pack) {
+        $formattedPacks = $packs->map(function ($pack) use ($user) {
+            // Vérifier si l'utilisateur possède ce pack (seulement si authentifié)
+            $isPurchased = false;
+            if ($user) {
+                $isPurchased = UserPack::where('user_id', $user->id)
+                    ->where('pack_id', $pack->id)
+                    ->exists();
+            }
+
             return [
                 'id' => $pack->id,
                 'name' => $pack->name,
@@ -38,6 +48,7 @@ class FormationPackController extends Controller
                 'formations_count' => $pack->formations->count(),
                 'formations' => $pack->formations,
                 'is_featured' => $pack->is_featured,
+                'is_purchased' => $isPurchased,
                 'created_at' => $pack->created_at,
             ];
         });
