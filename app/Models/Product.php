@@ -31,6 +31,33 @@ class Product extends Model
         'metadata' => 'array',
     ];
 
+    /**
+     * Modifier l'attribut image_url pour retourner l'URL complète
+     */
+    protected function imageUrl(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: function ($value) {
+                if (!$value) {
+                    return null;
+                }
+
+                // Si l'URL est déjà absolue (commence par http:// ou https://), la retourner telle quelle
+                if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+                    return $value;
+                }
+
+                // Si c'est un chemin relatif (commence par /), construire l'URL complète
+                if (str_starts_with($value, '/')) {
+                    return url($value);
+                }
+
+                // Sinon, ajouter /storage/ au début et construire l'URL
+                return url('/storage/' . $value);
+            },
+        );
+    }
+
     protected static function boot()
     {
         parent::boot();
