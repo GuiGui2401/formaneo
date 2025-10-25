@@ -15,6 +15,7 @@ class Product extends Model
         'slug',
         'description',
         'image_url',
+        'file_path',
         'price',
         'promotion_price',
         'is_on_promotion',

@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\EbookController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\BannerController;
+use App\Http\Controllers\Admin\NotificationController;
 use App\Models\FormationVideo;
 
 /*
@@ -144,6 +145,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::put('/{banner}', [BannerController::class, 'update'])->name('update');
             Route::delete('/{banner}', [BannerController::class, 'destroy'])->name('destroy');
             Route::post('/{banner}/toggle-status', [BannerController::class, 'toggleStatus'])->name('toggle-status');
+        });
+
+        // Notifications
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+            Route::get('/create', [NotificationController::class, 'create'])->name('create');
+            Route::post('/send', [NotificationController::class, 'send'])->name('send');
         });
     });
 });

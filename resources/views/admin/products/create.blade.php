@@ -35,6 +35,13 @@
                     @enderror
                 </div>
                 <div class="form-group">
+                    <label for="file">Downloadable File (PDF, MP4, APK, etc.)</label>
+                    <input type="file" class="form-control-file" id="file" name="file">
+                    @error('file')
+                        <div class="text-danger">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="form-group">
                     <label for="price">Price (FCFA)</label>
                     <input type="number" step="0.01" class="form-control" id="price" name="price" value="{{ old('price') }}" required>
                     @error('price')

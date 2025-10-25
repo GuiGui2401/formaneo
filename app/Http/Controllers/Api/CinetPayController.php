@@ -30,7 +30,7 @@ class CinetPayController extends Controller
         
         // Configuration pour l'API de transfert
         $this->transferApiUrl = 'https://client.cinetpay.com/v1';
-        $this->transferPassword = '12345678'; // Mot de passe API CinetPay pour les transferts uniquement
+        $this->transferPassword = config('cinetpay.transfer_password'); // Mot de passe API CinetPay pour les transferts uniquement
     }
 
     /**

@@ -42,6 +42,18 @@
                     @endif
                 </div>
                 <div class="form-group">
+                    <label for="file">Downloadable File (PDF, MP4, APK, etc.)</label>
+                    <input type="file" class="form-control-file" id="file" name="file">
+                    @error('file')
+                        <div class="text-danger">{{ $message }}</div>
+                    @enderror
+                    @if ($product->file_path)
+                        <div class="mt-2">
+                            Current File: <a href="{{ Storage::disk('local')->url($product->file_path) }}" target="_blank">{{ basename($product->file_path) }}</a>
+                        </div>
+                    @endif
+                </div>
+                <div class="form-group">
                     <label for="price">Price (FCFA)</label>
                     <input type="number" step="0.01" class="form-control" id="price" name="price" value="{{ old('price', $product->price) }}" required>
                     @error('price')

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Transaction;
+use App\Http\Controllers\Api\CinetPayController;
 
 class WalletController extends Controller
 {
@@ -50,57 +51,17 @@ class WalletController extends Controller
     // Demander un retrait
     public function requestWithdrawal(Request $request)
     {
+        // Validation de base. La logique complète est dans CinetPayController.
         $request->validate([
-            'amount' => 'required|numeric|min:1000|max:1000000',
-            'method' => 'sometimes|string|in:mobile_money,bank_transfer',
-            'phone_number' => 'required|string'
+            'amount' => 'required|numeric|min:500',
+            'phone_number' => 'required|string',
+            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN'
         ]);
 
-        $user = $request->user();
-        $amount = $request->amount;
-        $method = $request->method ?? 'mobile_money';
-        $phoneNumber = $request->phone_number;
-
-        // Vérifier que l'utilisateur a assez de fonds
-        $availableForWithdrawal = max(0, $user->balance - 1000);
+        $cinetPayController = new CinetPayController();
         
-        if ($amount > $availableForWithdrawal) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Solde insuffisant pour ce retrait'
-            ], 400);
-        }
-
-        // Créer la transaction de retrait
-        $transaction = $user->transactions()->create([
-            'type' => 'withdrawal',
-            'amount' => -$amount, // Négatif pour les retraits
-            'description' => "Retrait par {$method}",
-            'status' => 'pending',
-            'meta' => json_encode([
-                'method' => $method,
-                'phone_number' => $phoneNumber
-            ])
-        ]);
-
-        // Déduire le montant du solde
-        $user->decrement('balance', $amount);
-
-        // Envoyer une notification à l'administrateur
-        // Récupérer tous les administrateurs
-        $admins = \App\Models\Admin::all();
-        
-        // Envoyer une notification à chaque administrateur
-        foreach ($admins as $admin) {
-            $admin->notify(new \App\Notifications\WithdrawalRequestNotification($transaction, $user));
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Demande de retrait soumise avec succès',
-            'transaction_id' => $transaction->id,
-            'new_balance' => $user->balance
-        ]);
+        // Déléguer la logique de retrait au CinetPayController
+        return $cinetPayController->initiateWithdrawal($request);
     }
 
     // Effectuer un dépôt

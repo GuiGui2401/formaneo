@@ -53,8 +53,8 @@ class ProcessCinetPayTransfer implements ShouldQueue
             ]);
 
             // Configuration pour l'API de transfert CinetPay
-            $apiKey = '45213166268af015b7d2734.50726534'; // API Key pour les transferts
-            $transferPassword = '12345678'; // Mot de passe pour les transferts
+            $apiKey = config('cinetpay.api_key');
+            $transferPassword = config('cinetpay.transfer_password');
             
             // 1. Authentification
             $authResponse = $this->authenticate($apiKey, $transferPassword);
@@ -250,6 +250,7 @@ class ProcessCinetPayTransfer implements ShouldQueue
                 }
             }
 
+            Log::error('CinetPay raw response', ['response' => $response->body()]);
             return [
                 'success' => false,
                 'message' => $response->json()['message'] ?? 'Échec du transfert'

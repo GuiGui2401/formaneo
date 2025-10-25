@@ -19,11 +19,26 @@ class Transaction extends Model
         'completed_at' => 'datetime'
     ];
 
-    protected $appends = ['is_credit'];
+    protected $appends = ['is_credit', 'product'];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function getProductAttribute()
+    {
+        $meta = is_string($this->meta) ? json_decode($this->meta, true) : $this->meta;
+
+        if (!is_array($meta)) {
+            return null;
+        }
+
+        if (array_key_exists('product_id', $meta)) {
+            $productId = $meta['product_id'];
+            return Product::find($productId);
+        }
+        return null;
     }
 
     public function getIsCreditAttribute()

@@ -250,6 +250,14 @@
                         </li>
 
                         <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.notifications.*') ? 'active' : '' }}"
+                               href="{{ route('admin.notifications.create') }}">
+                                <i class="fas fa-bell me-2"></i>
+                                Notifications
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.transactions.*') ? 'active' : '' }}"
                                href="{{ route('admin.transactions.index') }}">
                                 <i class="fas fa-money-bill-wave me-2"></i>

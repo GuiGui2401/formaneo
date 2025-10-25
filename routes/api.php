@@ -17,6 +17,8 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ChallengeController;
 use App\Http\Controllers\Api\SupportController;
 use App\Http\Controllers\Api\CartController;
+use App\Http\Controllers\Api\PurchaseController;
+use App\Http\Controllers\Api\DeviceController;
 
 // Routes publiques
 Route::prefix('v1')->group(function () {
@@ -214,7 +216,18 @@ Route::prefix('v1')->group(function () {
             Route::post('remove', [CartController::class, 'remove']);
             Route::post('checkout', [CartController::class, 'checkout']);
         });
+
+        // Mes Achats
+        Route::prefix('purchases')->group(function () {
+            Route::get('/', [PurchaseController::class, 'index'])->name('purchases.index');
+        });
+
+        // Device Token
+        Route::post('/device-token', [DeviceController::class, 'storeToken']);
     });
+
+    // Public Purchases Download Route (with custom token handling)
+    Route::get('purchases/{productId}/download', [PurchaseController::class, 'download'])->middleware(\App\Http\Middleware\AuthenticateFromQueryParam::class)->name('purchases.download');
 
     // Routes publiques CinetPay (notifications)
     Route::prefix('cinetpay')->group(function () {
