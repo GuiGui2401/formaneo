@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\EbookController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\BannerController;
 use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Admin\AdminNotificationController;
 use App\Models\FormationVideo;
 
 /*
@@ -49,6 +50,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
             Route::post('/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('toggle-status');
             Route::post('/{user}/add-balance', [UserController::class, 'addBalance'])->name('add-balance');
+            Route::post('/{user}/activate', [UserController::class, 'activate'])->name('activate');
+            Route::post('/{user}/deactivate', [UserController::class, 'deactivate'])->name('deactivate');
+            Route::post('/{user}/fake-affiliate-data', [UserController::class, 'updateFakeAffiliateData'])->name('update-fake-affiliate-data');
+            Route::post('/{user}/generate-demo-data', [UserController::class, 'generateDemoData'])->name('generate-demo-data');
+        });
+
+        // Gestion des activations de comptes (route dédiée)
+        Route::prefix('account-activations')->name('account-activations.')->group(function () {
+            Route::get('/', [UserController::class, 'pending'])->name('index');
         });
 
         // Gestion des packs de formations
@@ -151,6 +161,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::prefix('notifications')->name('notifications.')->group(function () {
             Route::get('/create', [NotificationController::class, 'create'])->name('create');
             Route::post('/send', [NotificationController::class, 'send'])->name('send');
+        });
+
+        // Admin notifications (account activations, etc.)
+        Route::prefix('admin-notifications')->name('admin-notifications.')->group(function () {
+            Route::get('/', [AdminNotificationController::class, 'index'])->name('index');
+            Route::post('/{notification}/mark-read', [AdminNotificationController::class, 'markAsRead'])->name('mark-read');
+            Route::post('/mark-all-read', [AdminNotificationController::class, 'markAllAsRead'])->name('mark-all-read');
+            Route::get('/unread-count', [AdminNotificationController::class, 'getUnreadCount'])->name('unread-count');
         });
     });
 });

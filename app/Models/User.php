@@ -16,7 +16,9 @@ class User extends Authenticatable
         'balance', 'available_for_withdrawal', 'pending_withdrawals',
         'promo_code', 'affiliate_link', 'total_affiliates', 'monthly_affiliates', 
         'referred_by', 'total_commissions', 'free_quizzes_left', 'total_quizzes_taken',
-        'passed_quizzes', 'is_active', 'is_premium', 'metadata', 'settings', 'last_login_at'
+        'passed_quizzes', 'is_active', 'is_premium', 'metadata', 'settings', 'last_login_at',
+        'account_status', 'account_activated_at', 'account_expires_at', 'welcome_bonus_claimed',
+        'fake_affiliate_data_enabled', 'fake_affiliate_data'
     ];
 
     protected $hidden = [
@@ -28,7 +30,12 @@ class User extends Authenticatable
         'settings' => 'array',
         'is_active' => 'boolean',
         'is_premium' => 'boolean',
+        'welcome_bonus_claimed' => 'boolean',
+        'fake_affiliate_data_enabled' => 'boolean',
+        'fake_affiliate_data' => 'array',
         'last_login_at' => 'datetime',
+        'account_activated_at' => 'datetime',
+        'account_expires_at' => 'datetime',
         'balance' => 'decimal:2',
         'available_for_withdrawal' => 'decimal:2',
         'pending_withdrawals' => 'decimal:2',
@@ -160,5 +167,42 @@ class User extends Authenticatable
     public function getAverageQuizScore()
     {
         return $this->quizResults()->avg('score') ?: 0;
+    }
+
+    public function isAccountActive()
+    {
+        return $this->account_status === 'active' && 
+               $this->account_expires_at && 
+               $this->account_expires_at > now();
+    }
+
+    public function hasAccountExpired()
+    {
+        return $this->account_status === 'active' && 
+               $this->account_expires_at && 
+               $this->account_expires_at <= now();
+    }
+
+    public function activateAccount()
+    {
+        $this->update([
+            'account_status' => 'active',
+            'account_activated_at' => now(),
+            'account_expires_at' => now()->addMonth(),
+        ]);
+    }
+
+    public function deactivateAccount()
+    {
+        $this->update([
+            'account_status' => 'inactive'
+        ]);
+    }
+
+    public function expireAccount()
+    {
+        $this->update([
+            'account_status' => 'expired'
+        ]);
     }
 }

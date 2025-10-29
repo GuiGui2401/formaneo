@@ -55,6 +55,8 @@ class TransactionController extends Controller
     public function approve(Transaction $transaction)
     {
         if ($transaction->type === 'withdrawal' && $transaction->status === 'pending') {
+            // Déduire le montant du solde de l'utilisateur lors de l'approbation
+            $transaction->user->decrement('balance', abs($transaction->amount));
             $transaction->update(['status' => 'completed']);
             
             return back()->with('success', 'Retrait approuvé avec succès.');
@@ -66,11 +68,11 @@ class TransactionController extends Controller
     public function reject(Transaction $transaction)
     {
         if ($transaction->type === 'withdrawal' && $transaction->status === 'pending') {
-            // Rembourser le montant à l'utilisateur
-            $transaction->user->increment('balance', abs($transaction->amount));
+            // Ne PAS rembourser car le montant n'a jamais été débité lors de la création de la demande
+            // Le solde reste intact, on change juste le statut
             $transaction->update(['status' => 'cancelled']);
             
-            return back()->with('success', 'Retrait rejeté et montant remboursé.');
+            return back()->with('success', 'Retrait annulé.');
         }
 
         return back()->with('error', 'Impossible de rejeter cette transaction.');

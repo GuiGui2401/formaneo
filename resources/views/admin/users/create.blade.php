@@ -120,7 +120,7 @@
                                        class="form-control @error('balance') is-invalid @enderror" 
                                        id="balance" 
                                        name="balance" 
-                                       value="{{ old('balance', 1000) }}" 
+                                       value="{{ old('balance', 0) }}" 
                                        min="0" 
                                        step="0.01">
                                 <span class="input-group-text">FCFA</span>

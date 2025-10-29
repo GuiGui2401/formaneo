@@ -47,6 +47,14 @@ class QuizController extends Controller
 
         $user = $request->user();
         
+        // Vérifier que le compte est activé
+        if ($user->account_status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Activez votre compte pour pouvoir faire des quiz'
+            ], 403);
+        }
+        
         // Créer le résultat du quiz
         $quizResult = QuizResult::create([
             'user_id' => $user->id,

@@ -148,6 +148,23 @@ class FormationPackController extends Controller
         ]);
     }
 
+    // Obtenir les catégories de packs
+    public function getCategories()
+    {
+        // Pour l'instant, retournons des catégories statiques
+        // Plus tard, vous pourrez créer un modèle Category si nécessaire
+        $categories = [
+            ['id' => 1, 'name' => 'Business', 'slug' => 'business'],
+            ['id' => 2, 'name' => 'Technologie', 'slug' => 'technologie'],
+            ['id' => 3, 'name' => 'Marketing', 'slug' => 'marketing'],
+            ['id' => 4, 'name' => 'Développement Personnel', 'slug' => 'developpement-personnel'],
+        ];
+
+        return response()->json([
+            'categories' => $categories
+        ]);
+    }
+
     // Obtenir les formations d'un pack
     public function getFormations(Request $request, $id)
     {

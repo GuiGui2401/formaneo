@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Jobs\ProcessCinetPayTransfer;
@@ -39,7 +40,7 @@ class CinetPayController extends Controller
     public function initiateDepositPayment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:500|multiple_of:5',
+            'amount' => 'required|numeric|min:100|multiple_of:5',
             'phone_number' => 'nullable|string',
         ]);
 
@@ -486,7 +487,7 @@ class CinetPayController extends Controller
     public function testPayment(Request $request)
     {
         $request->validate([
-            'amount' => 'required|numeric|min:500|multiple_of:5',
+            'amount' => 'required|numeric|min:100|multiple_of:5',
             'phone' => 'required|string'
         ]);
 
@@ -713,8 +714,8 @@ class CinetPayController extends Controller
         }
         
         if (!$transaction) {
-            // Méthode 3: parcourir toutes les transactions
-            $allTransactions = Transaction::where('type', 'deposit')->get();
+            // Méthode 3: parcourir toutes les transactions (deposit ET account_activation)
+            $allTransactions = Transaction::whereIn('type', ['deposit', 'account_activation'])->get();
             foreach ($allTransactions as $tx) {
                 $meta = json_decode($tx->meta, true);
                 if (isset($meta['transaction_id']) && $meta['transaction_id'] === $transactionId) {
@@ -794,18 +795,41 @@ class CinetPayController extends Controller
                     ))
                 ]);
                 
-                Log::info('Traitement du dépôt', [
-                    'transaction_id' => $transactionId,
-                    'amount' => $transaction->amount
-                ]);
+                // Traiter selon le type de transaction
+                if ($transaction->type === 'deposit') {
+                    Log::info('Traitement du dépôt', [
+                        'transaction_id' => $transactionId,
+                        'amount' => $transaction->amount
+                    ]);
+                    
+                    $this->processDeposit($transaction);
+                    
+                    Log::info('Dépôt traité avec succès', [
+                        'transaction_id' => $transactionId,
+                        'amount' => $transaction->amount,
+                        'new_balance' => $transaction->user->fresh()->balance
+                    ]);
+                } elseif ($transaction->type === 'account_activation') {
+                    Log::info('Traitement de l\'activation de compte', [
+                        'transaction_id' => $transactionId,
+                        'user_id' => $transaction->user_id
+                    ]);
+                    
+                    $this->processAccountActivation($transaction);
+                    
+                    Log::info('Activation de compte traitée avec succès', [
+                        'transaction_id' => $transactionId,
+                        'user_id' => $transaction->user_id,
+                        'account_status' => $transaction->user->fresh()->account_status
+                    ]);
+                }
                 
-                $this->processDeposit($transaction);
                 $currentStatus = 'completed';
                 
                 Log::info('Transaction marquée comme COMPLÉTÉE avec succès', [
                     'transaction_id' => $transactionId,
-                    'amount' => $transaction->amount,
-                    'new_balance' => $transaction->user->fresh()->balance
+                    'type' => $transaction->type,
+                    'amount' => $transaction->amount
                 ]);
                 
             } elseif ($cinetpayStatus === 'REFUSED' && $currentStatus !== 'failed') {
@@ -868,17 +892,13 @@ class CinetPayController extends Controller
      */
     public function initiateWithdrawal(Request $request)
     {
-        // Vérifier si on doit utiliser le mode asynchrone (via queue)
-        $useQueue = $request->input('async', false) || env('CINETPAY_USE_QUEUE', true);
-        
-        if ($useQueue) {
-            return $this->initiateWithdrawalAsync($request);
-        }
+        // Mode manuel : créer seulement la transaction en attente de validation admin
+        return $this->createWithdrawalRequest($request);
         
         $request->validate([
             'amount' => 'required|numeric|min:500|multiple_of:5',
             'phone_number' => 'required|string',
-            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN'
+            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN,AUTO'
         ]);
         
         // Utiliser l'opérateur fourni ou null pour auto-détection
@@ -1313,12 +1333,12 @@ class CinetPayController extends Controller
     /**
      * Initier un retrait de façon asynchrone (via queue)
      */
-    private function initiateWithdrawalAsync(Request $request)
+    private function initiateWithdrawalManual(Request $request)
     {
         $request->validate([
             'amount' => 'required|numeric|min:500|multiple_of:5',
             'phone_number' => 'required|string',
-            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN'
+            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN,AUTO'
         ]);
         
         // Utiliser l'opérateur fourni ou null pour auto-détection
@@ -1388,6 +1408,215 @@ class CinetPayController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur lors de l\'initiation du retrait. Veuillez réessayer.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Créer une demande de retrait en attente de validation admin
+     */
+    private function createWithdrawalRequest(Request $request)
+    {
+        $request->validate([
+            'amount' => 'required|numeric|min:500|multiple_of:5',
+            'phone_number' => 'required|string',
+            'operator' => 'nullable|string|in:WAVECI,WAVESN,MOOV,MTN,AUTO'
+        ]);
+        
+        $operator = $request->input('operator', null);
+        $user = $request->user();
+        $amount = $request->amount;
+        
+        // Vérifier le solde disponible (sans déduire maintenant)
+        $availableForWithdrawal = max(0, $user->balance - 1000);
+        
+        if ($amount > $availableForWithdrawal) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Solde insuffisant pour ce retrait'
+            ], 400);
+        }
+        
+        try {
+            // Créer la transaction en attente de validation admin
+            $transaction = $user->transactions()->create([
+                'type' => 'withdrawal',
+                'amount' => -$amount,
+                'description' => "Demande de retrait vers " . ($operator ?: 'Auto') . " - {$request->phone_number}",
+                'status' => 'pending', // En attente de validation admin
+                'meta' => json_encode([
+                    'operator' => $operator,
+                    'phone_number' => $request->phone_number,
+                    'requested_at' => now(),
+                    'validation_required' => true,
+                    'admin_validated' => false
+                ])
+            ]);
+            
+            Log::info('Demande de retrait créée en attente de validation admin', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $user->id,
+                'amount' => $amount,
+                'phone' => $request->phone_number,
+                'operator' => $operator
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Votre demande de retrait a été enregistrée et est en attente de validation par l\'administrateur. Consultez l\'historique pour suivre l\'avancement.',
+                'transaction_id' => $transaction->id,
+                'status' => 'pending',
+                'new_balance' => $user->balance,
+                'processing_mode' => 'manual_validation'
+            ]);
+        } catch (Exception $e) {
+            Log::error('Erreur lors de la création de la demande de retrait', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'enregistrement de la demande. Veuillez réessayer.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Valider manuellement un retrait (pour l'admin)
+     */
+    public function validateWithdrawal(Request $request)
+    {
+        Log::info('=== VALIDATE WITHDRAWAL START ===', [
+            'request_data' => $request->all(),
+            'admin_user' => auth()->id()
+        ]);
+        
+        $request->validate([
+            'transaction_id' => 'required|integer|exists:transactions,id'
+        ]);
+        
+        $transaction = Transaction::findOrFail($request->transaction_id);
+        
+        Log::info('Transaction found', [
+            'transaction_id' => $transaction->id,
+            'type' => $transaction->type,
+            'status' => $transaction->status,
+            'amount' => $transaction->amount,
+            'user_id' => $transaction->user_id
+        ]);
+        
+        // Vérifier que c'est bien un retrait en attente
+        if ($transaction->type !== 'withdrawal' || $transaction->status !== 'pending') {
+            Log::warning('Transaction validation failed', [
+                'reason' => 'Invalid type or status',
+                'type' => $transaction->type,
+                'status' => $transaction->status
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Cette transaction ne peut pas être validée'
+            ], 400);
+        }
+        
+        $user = $transaction->user;
+        $amount = abs($transaction->amount);
+        
+        Log::info('User info before validation', [
+            'user_id' => $user->id,
+            'current_balance' => $user->balance,
+            'withdrawal_amount' => $amount
+        ]);
+        
+        // Vérifier que l'utilisateur a encore le solde
+        $availableForWithdrawal = max(0, $user->balance - 1000);
+        if ($amount > $availableForWithdrawal) {
+            Log::warning('Insufficient balance for withdrawal', [
+                'user_balance' => $user->balance,
+                'available_for_withdrawal' => $availableForWithdrawal,
+                'requested_amount' => $amount
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'L\'utilisateur n\'a plus le solde suffisant pour ce retrait'
+            ], 400);
+        }
+        
+        try {
+            // Déduire le solde maintenant
+            Log::info('About to decrement balance', [
+                'user_id' => $user->id,
+                'current_balance' => $user->balance,
+                'amount_to_deduct' => $amount
+            ]);
+            
+            $balanceBeforeDecrement = $user->balance;
+            $decrementResult = $user->decrement('balance', $amount);
+            $user->refresh(); // Recharger l'utilisateur depuis la DB
+            
+            Log::info('Balance decremented', [
+                'user_id' => $user->id,
+                'balance_before' => $balanceBeforeDecrement,
+                'balance_after' => $user->balance,
+                'amount_deducted' => $amount,
+                'decrement_result' => $decrementResult
+            ]);
+            
+            // Mettre à jour la transaction
+            $meta = json_decode($transaction->meta, true);
+            $meta['admin_validated'] = true;
+            $meta['validated_at'] = now();
+            $meta['validated_by'] = auth()->id(); // ID de l'admin
+            
+            $transaction->update([
+                'status' => 'processing', // En cours de traitement
+                'meta' => json_encode($meta)
+            ]);
+            
+            Log::info('Transaction updated to processing', [
+                'transaction_id' => $transaction->id,
+                'new_status' => 'processing',
+                'meta' => $meta
+            ]);
+            
+            // Lancer le job CinetPay maintenant
+            ProcessCinetPayTransfer::dispatch(
+                $transaction,
+                $user,
+                $amount,
+                $meta['phone_number'],
+                $meta['operator']
+            );
+            
+            Log::info('ProcessCinetPayTransfer job dispatched', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $user->id,
+                'amount' => $amount,
+                'phone' => $meta['phone_number'],
+                'operator' => $meta['operator']
+            ]);
+            
+            Log::info('Retrait validé par admin et job lancé', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $user->id,
+                'amount' => $amount,
+                'validated_by' => auth()->id()
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Retrait validé et mis en traitement',
+                'transaction_id' => $transaction->id,
+                'new_user_balance' => $user->balance
+            ]);
+            
+        } catch (Exception $e) {
+            Log::error('Erreur lors de la validation du retrait', [
+                'error' => $e->getMessage(),
+                'transaction_id' => $transaction->id
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la validation'
             ], 500);
         }
     }
@@ -1488,5 +1717,55 @@ class CinetPayController extends Controller
                 'current_status' => $transaction->status
             ], 500);
         }
+    }
+
+    /**
+     * Traiter l'activation du compte après paiement réussi
+     */
+    private function processAccountActivation($transaction)
+    {
+        if ($transaction->type !== 'account_activation') {
+            return;
+        }
+
+        $user = $transaction->user;
+        
+        DB::transaction(function () use ($user, $transaction) {
+            // Activer le compte
+            $user->update([
+                'account_status' => 'active',
+                'account_activated_at' => now(),
+                'account_expires_at' => now()->addMonth()
+            ]);
+            
+            // Donner le bonus de bienvenue si pas encore réclamé
+            if (!$user->welcome_bonus_claimed) {
+                $user->update([
+                    'balance' => ($user->balance ?? 0) + 2000,
+                    'welcome_bonus_claimed' => true
+                ]);
+                
+                // Créer la transaction du bonus de bienvenue
+                Transaction::create([
+                    'user_id' => $user->id,
+                    'type' => 'bonus',
+                    'amount' => 2000,
+                    'description' => 'Bonus de bienvenue - Activation compte',
+                    'status' => 'completed',
+                    'meta' => json_encode([
+                        'bonus_type' => 'welcome_bonus_activation',
+                        'activation_transaction_id' => $transaction->id
+                    ])
+                ]);
+            }
+            
+            Log::info('✓ Activation de compte traitée avec succès', [
+                'user_id' => $user->id,
+                'account_status' => 'active',
+                'expires_at' => $user->account_expires_at,
+                'bonus_given' => !$user->welcome_bonus_claimed,
+                'new_balance' => $user->fresh()->balance
+            ]);
+        });
     }
 }

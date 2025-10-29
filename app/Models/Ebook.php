@@ -75,7 +75,18 @@ class Ebook extends Model
     public function getPdfUrlAttribute($value)
     {
         if ($value) {
-            return $value;
+            // Si c'est déjà une URL complète, on la retourne telle quelle
+            if (filter_var($value, FILTER_VALIDATE_URL)) {
+                return $value;
+            }
+            
+            // Construire l'URL complète avec l'URL de base du serveur
+            $baseUrl = config('app.url');
+            
+            // Nettoyer le chemin (enlever les slashes en double)
+            $cleanPath = ltrim($value, '/');
+            
+            return $baseUrl . '/' . $cleanPath;
         }
         
         return null;

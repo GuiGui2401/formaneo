@@ -57,11 +57,68 @@ class FormationController extends Controller
         ]);
     }
 
+    // Obtenir les statistiques de progression des formations
+    public function getProgressStats(Request $request)
+    {
+        $user = $request->user();
+
+        // Récupérer tous les packs achetés par l'utilisateur
+        $userPacks = $user->ownedPacks()->with('formations')->get();
+
+        // Compter toutes les formations accessibles
+        $totalFormations = $userPacks->flatMap(function ($pack) {
+            return $pack->formations;
+        })->count();
+
+        // Récupérer tous les progrès de formation de l'utilisateur
+        $allProgress = FormationProgress::where('user_id', $user->id)->get();
+
+        // Compter les formations complétées (100% de progression)
+        $completedFormations = $allProgress->where('progress', '>=', 100)->count();
+
+        // Compter les formations en cours (progression > 0 et < 100)
+        $inProgressFormations = $allProgress->where('progress', '>', 0)->where('progress', '<', 100)->count();
+
+        // Calculer les heures totales de formation
+        $totalMinutes = $userPacks->flatMap(function ($pack) {
+            return $pack->formations;
+        })->sum('duration_minutes');
+        $totalHours = round($totalMinutes / 60, 1);
+
+        // Compter les certificats obtenus
+        $certificatesEarned = FormationCertificate::where('user_id', $user->id)->count();
+
+        // Calculer le cashback total (exemple: 10% du prix des formations complétées)
+        $totalCashback = $completedFormations * 500; // 500 FCFA par formation complétée
+
+        return response()->json([
+            'success' => true,
+            'total_formations' => $totalFormations,
+            'completed_formations' => $completedFormations,
+            'in_progress' => $inProgressFormations,
+            'total_hours' => $totalHours,
+            'certificates_earned' => $certificatesEarned,
+            'total_cashback' => $totalCashback,
+        ]);
+    }
+
     // Obtenir une formation spécifique avec ses vidéos
     public function show(Request $request, $id)
     {
-        $formation = Formation::with(['videos', 'pack'])->findOrFail($id);
+        $formation = Formation::with(['videos', 'modules', 'pack'])->findOrFail($id);
         $user = $request->user();
+
+        // Vérifier si l'utilisateur a accès à cette formation via un pack acheté
+        $hasAccess = \App\Models\UserPack::where('user_id', $user->id)
+            ->where('pack_id', $formation->pack_id)
+            ->exists();
+
+        if (!$hasAccess) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Vous devez acheter le pack pour accéder à cette formation'
+            ], 403);
+        }
 
         // Récupérer le progrès de l'utilisateur pour cette formation
         $progress = FormationProgress::where('user_id', $user->id)
@@ -77,12 +134,42 @@ class FormationController extends Controller
             $videoData = $video->toArray();
             $videoData['user_progress'] = $videoProgress ? $videoProgress->progress : 0;
             $videoData['completed_at'] = $videoProgress ? $videoProgress->completed_at : null;
+            $videoData['type'] = 'video'; // Pour différencier dans le frontend
 
             return $videoData;
         });
 
+        // Récupérer les modules avec leurs vidéos (s'il y en a)
+        $modulesData = $formation->modules->map(function ($module) use ($user) {
+            $moduleData = $module->toArray();
+            $moduleData['user_progress'] = 0; // TODO: Implémenter le suivi des modules si nécessaire
+            $moduleData['completed_at'] = null;
+            $moduleData['type'] = 'module'; // Pour différencier dans le frontend
+            
+            return $moduleData;
+        });
+
+        // Combiner videos et modules pour créer une playlist complète
+        $allPlaylistItems = collect();
+        
+        // Ajouter les vidéos
+        foreach ($videosData as $video) {
+            $allPlaylistItems->push($video);
+        }
+        
+        // Ajouter les modules qui ont des URLs vidéo
+        foreach ($modulesData as $module) {
+            if (!empty($module['video_url'])) {
+                $allPlaylistItems->push($module);
+            }
+        }
+
+        // Trier par ordre
+        $allPlaylistItems = $allPlaylistItems->sortBy('order')->values();
+
         $formationData = $formation->toArray();
-        $formationData['videos'] = $videosData;
+        $formationData['videos'] = $allPlaylistItems; // Maintenant contient vidéos ET modules
+        $formationData['modules'] = $modulesData; // Garder séparément pour compatibilité
         $formationData['user_progress'] = $progress ? $progress->progress : 0;
         $formationData['completed_at'] = $progress ? $progress->completed_at : null;
 
@@ -307,36 +394,6 @@ class FormationController extends Controller
             'success' => true,
             'cashback_amount' => $cashbackAmount,
             'new_balance' => $user->balance
-        ]);
-    }
-
-    // Obtenir les statistiques de progression
-    public function getProgressStats(Request $request)
-    {
-        $user = $request->user();
-
-        $totalFormations = FormationProgress::where('user_id', $user->id)->count();
-        $completedFormations = FormationProgress::where('user_id', $user->id)
-            ->where('progress', 100)
-            ->count();
-
-        $totalHours = FormationProgress::join('formations', 'formation_progress.formation_id', '=', 'formations.id')
-            ->where('formation_progress.user_id', $user->id)
-            ->where('formation_progress.progress', 100)
-            ->sum('formations.duration_minutes') / 60;
-
-        $certificatesEarned = $completedFormations; // Supposons 1 certificat par formation complétée
-
-        $totalCashback = $user->transactions()
-            ->where('type', 'cashback')
-            ->sum('amount');
-
-        return response()->json([
-            'total_formations' => $totalFormations,
-            'completed_formations' => $completedFormations,
-            'total_hours' => round($totalHours, 1),
-            'certificates_earned' => $certificatesEarned,
-            'total_cashback' => $totalCashback
         ]);
     }
 

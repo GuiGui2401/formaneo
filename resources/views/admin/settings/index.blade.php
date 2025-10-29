@@ -191,6 +191,50 @@
                 </div>
             </div>
         </div>
+
+        <!-- Paramètres d'Activation de Compte -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-key me-2"></i>
+                        Activation de Compte
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="account_activation_cost" class="form-label">
+                            Coût d'activation mensuel (FCFA)
+                        </label>
+                        <input type="number" 
+                               class="form-control @error('account_activation_cost') is-invalid @enderror" 
+                               id="account_activation_cost" 
+                               name="account_activation_cost" 
+                               value="{{ old('account_activation_cost', $settings['account_activation_cost']) }}" 
+                               min="100" 
+                               step="1" 
+                               required>
+                        @error('account_activation_cost')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="form-text">Montant que les utilisateurs web doivent payer pour activer leur compte (valable 1 mois)</div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Important
+                        </h6>
+                        <ul class="mb-0 small">
+                            <li>Les comptes web sont inactifs par défaut</li>
+                            <li>Les utilisateurs mobiles ne sont pas affectés</li>
+                            <li>Un bonus de 2000 FCFA est accordé après activation</li>
+                            <li>L'activation dure 1 mois puis expire automatiquement</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <!-- Paramètres de Formation -->
         <div class="col-lg-6 mb-4">
@@ -383,6 +427,7 @@ function resetToDefaults() {
         document.getElementById('support_email').value = 'support@formaneo.com';
         document.getElementById('support_phone').value = '+225 XX XX XX XX XX';
         document.getElementById('support_whatsapp').value = '+225XXXXXXXXXX';
+        document.getElementById('account_activation_cost').value = 5000;
     }
 }
 

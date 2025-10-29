@@ -189,6 +189,85 @@
             </div>
         </div>
         
+        <!-- Configuration des données d'affiliation (Fake Data) -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Données d'affiliation pour démonstration
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <strong>Mode démonstration :</strong> Activez cette option pour afficher des données simulées dans les graphiques d'affiliation du client (uniquement pour les démonstrations).
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" 
+                                   type="checkbox" 
+                                   id="fake_data_toggle" 
+                                   {{ $user->fake_affiliate_data_enabled ? 'checked' : '' }}>
+                            <label class="form-check-label" for="fake_data_toggle">
+                                <strong>Activer les données de démonstration</strong>
+                            </label>
+                        </div>
+                        
+                        @if($user->fake_affiliate_data_enabled)
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle me-1"></i>
+                                Données de démonstration <strong>activées</strong>
+                            </div>
+                        @else
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-circle me-1"></i>
+                                Données réelles affichées
+                            </div>
+                        @endif
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="d-grid gap-2">
+                            <button type="button" 
+                                    class="btn btn-primary"
+                                    onclick="generateDemoData({{ $user->id }})">
+                                <i class="fas fa-magic me-1"></i>
+                                Générer données de démo
+                            </button>
+                            
+                            <button type="button" 
+                                    class="btn btn-outline-secondary"
+                                    onclick="toggleFakeData({{ $user->id }})">
+                                <i class="fas fa-toggle-off me-1"></i>
+                                Basculer mode
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                @if($user->fake_affiliate_data)
+                    <hr>
+                    <h6 class="text-muted mb-3">Aperçu des données configurées :</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Top performers :</small>
+                            <ul class="list-unstyled">
+                                @foreach($user->fake_affiliate_data['top_performers'] ?? [] as $performer)
+                                    <li><small>{{ $performer['name'] }} - {{ number_format($performer['total_commission']) }} FCFA</small></li>
+                                @endforeach
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Données graphique :</small>
+                            <p><small>{{ count($user->fake_affiliate_data['chart_data']['labels'] ?? []) }} jours de données</small></p>
+                        </div>
+                    </div>
+                @endif
+            </div>
+        </div>
+        
         <!-- Transactions récentes -->
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -290,5 +369,90 @@ function toggleUserStatus(userId, action) {
         });
     }
 }
+
+// Fonctions pour la gestion des fake data
+function generateDemoData(userId) {
+    if (confirm('Générer des données de démonstration pour cet utilisateur ?')) {
+        fetch(`/admin/users/${userId}/generate-demo-data`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success !== false) {
+                showAlert('success', 'Données de démonstration générées avec succès !');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert('danger', 'Erreur lors de la génération des données de démonstration');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', 'Erreur lors de la génération des données de démonstration');
+        });
+    }
+}
+
+function toggleFakeData(userId) {
+    const toggle = document.getElementById('fake_data_toggle');
+    const enabled = toggle.checked;
+    
+    const formData = new FormData();
+    formData.append('fake_affiliate_data_enabled', enabled ? '1' : '0');
+    formData.append('fake_affiliate_data', '');
+    
+    fetch(`/admin/users/${userId}/fake-affiliate-data`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json',
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success !== false) {
+            showAlert('success', enabled ? 'Mode démonstration activé' : 'Mode réel activé');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert('danger', 'Erreur lors du changement de mode');
+            toggle.checked = !enabled; // Revenir à l'état précédent
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'Erreur lors du changement de mode');
+        toggle.checked = !enabled; // Revenir à l'état précédent
+    });
+}
+
+function showAlert(type, message) {
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type} position-fixed`;
+    alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alert.innerHTML = `<i class="fas fa-${type === 'success' ? 'check' : 'exclamation-triangle'} me-1"></i> ${message}`;
+    
+    document.body.appendChild(alert);
+    
+    setTimeout(() => {
+        if (document.body.contains(alert)) {
+            document.body.removeChild(alert);
+        }
+    }, 3000);
+}
+
+// Event listener pour le toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const toggle = document.getElementById('fake_data_toggle');
+    if (toggle) {
+        toggle.addEventListener('change', function() {
+            toggleFakeData({{ $user->id }});
+        });
+    }
+});
 </script>
 @endpush

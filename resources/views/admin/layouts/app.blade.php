@@ -192,6 +192,34 @@
                                 Utilisateurs
                             </a>
                         </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.account-activations.*') ? 'active' : '' }}" 
+                               href="{{ route('admin.account-activations.index') }}">
+                                <i class="fas fa-user-clock me-2"></i>
+                                Comptes à Activer
+                                @php
+                                    $pendingCount = \App\Models\User::where('account_status', 'inactive')->count();
+                                @endphp
+                                @if($pendingCount > 0)
+                                    <span class="badge bg-warning ms-2">{{ $pendingCount }}</span>
+                                @endif
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('admin.admin-notifications.*') ? 'active' : '' }}" 
+                               href="{{ route('admin.admin-notifications.index') }}">
+                                <i class="fas fa-bell me-2"></i>
+                                Notifications Admin
+                                @php
+                                    $unreadCount = \App\Models\AdminNotification::where('is_read', false)->count();
+                                @endphp
+                                @if($unreadCount > 0)
+                                    <span class="badge bg-danger ms-2">{{ $unreadCount }}</span>
+                                @endif
+                            </a>
+                        </li>
                         
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.formation-packs.*') ? 'active' : '' }}" 

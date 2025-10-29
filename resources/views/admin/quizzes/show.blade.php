@@ -85,7 +85,7 @@
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <h6 class="mb-0">Question {{ $index + 1 }}</h6>
                                 <span class="badge bg-secondary">
-                                    {{ isset($question['correct_answer']) ? $question['correct_answer'] + 1 : 'N/A' }}
+                                    {{ isset($question['correctAnswer']) ? $question['correctAnswer'] + 1 : 'N/A' }}
                                 </span>
                             </div>
                             
@@ -95,9 +95,9 @@
                                 <div class="row">
                                     @foreach($question['options'] as $optionIndex => $option)
                                         <div class="col-md-6 mb-2">
-                                            <div class="p-2 rounded {{ isset($question['correct_answer']) && $optionIndex === $question['correct_answer'] ? 'bg-success text-white' : 'bg-light' }}">
+                                            <div class="p-2 rounded {{ isset($question['correctAnswer']) && $optionIndex === $question['correctAnswer'] ? 'bg-success text-white' : 'bg-light' }}">
                                                 <strong>{{ chr(65 + $optionIndex) }}.</strong> {{ $option }}
-                                                @if(isset($question['correct_answer']) && $optionIndex === $question['correct_answer'])
+                                                @if(isset($question['correctAnswer']) && $optionIndex === $question['correctAnswer'])
                                                     <i class="fas fa-check ms-2"></i>
                                                 @endif
                                             </div>

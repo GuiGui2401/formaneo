@@ -38,7 +38,7 @@ class QuizController extends Controller
 
     public function create()
     {
-        $subjects = ['Culture générale', 'Mathématiques', 'Physique', 'Informatique', 'Histoire', 'Géographie', 'Sciences'];
+        $subjects = ['dropshipping', 'marketing', 'ecommerce', 'affiliation', 'shopify', 'design', 'finance', 'social_media', 'entrepreneurship', 'advertising'];
         $difficulties = ['facile', 'moyen', 'difficile'];
         
         return view('admin.quizzes.create', compact('subjects', 'difficulties'));
@@ -89,7 +89,7 @@ class QuizController extends Controller
     // MÉTHODE MANQUANTE : edit()
     public function edit(Quiz $quiz)
     {
-        $subjects = ['Culture générale', 'Mathématiques', 'Physique', 'Informatique', 'Histoire', 'Géographie', 'Sciences'];
+        $subjects = ['dropshipping', 'marketing', 'ecommerce', 'affiliation', 'shopify', 'design', 'finance', 'social_media', 'entrepreneurship', 'advertising'];
         $difficulties = ['facile', 'moyen', 'difficile'];
         
         return view('admin.quizzes.edit', compact('quiz', 'subjects', 'difficulties'));

@@ -14,8 +14,25 @@ class WalletController extends Controller
     {
         $user = $request->user();
         
-        // Calculer le montant disponible pour retrait
-        $availableForWithdrawal = max(0, $user->balance - 1000); // Garder 1000 FCFA minimum
+        // Calculer le montant disponible pour retrait = uniquement les dépôts réels
+        $totalDeposits = $user->transactions()
+            ->where('type', 'deposit')
+            ->where('status', 'completed')
+            ->sum('amount');
+            
+        // Soustraire les retraits déjà effectués
+        $totalWithdrawals = $user->transactions()
+            ->where('type', 'withdrawal')
+            ->where('status', 'completed')
+            ->sum('amount');
+            
+        // Soustraire les achats effectués avec l'argent des dépôts
+        $totalPurchases = $user->transactions()
+            ->whereIn('type', ['formation_purchase', 'ebook_purchase', 'purchase'])
+            ->where('status', 'completed')
+            ->sum('amount');
+            
+        $availableForWithdrawal = max(0, $totalDeposits - abs($totalWithdrawals) - abs($totalPurchases));
         
         // Calculer les retraits en attente
         $pendingWithdrawals = $user->transactions()
@@ -23,19 +40,30 @@ class WalletController extends Controller
             ->where('status', 'pending')
             ->sum('amount');
 
-        // Calculer le total des gains
-        $totalEarned = $user->transactions()
+        // Calculer les gains restants = gains reçus - achats faits avec ces gains
+        $totalGainsReceived = $user->transactions()
             ->whereIn('type', ['commission', 'bonus', 'cashback', 'quiz_reward'])
+            ->where('status', 'completed')
             ->sum('amount');
+            
+        // Les achats réduisent les gains disponibles
+        $totalPurchasesFromGains = $user->transactions()
+            ->whereIn('type', ['formation_purchase', 'ebook_purchase', 'purchase'])
+            ->where('status', 'completed')
+            ->sum('amount');
+            
+        $totalEarned = max(0, $totalGainsReceived - abs($totalPurchasesFromGains));
 
         // Calculer le total des commissions
         $totalCommissions = $user->transactions()
             ->where('type', 'commission')
+            ->where('status', 'completed')
             ->sum('amount');
 
         // Calculer le total des quiz et bonus
         $totalQuizAndBonus = $user->transactions()
             ->whereIn('type', ['quiz_reward', 'bonus'])
+            ->where('status', 'completed')
             ->sum('amount');
 
         return response()->json([
@@ -45,6 +73,8 @@ class WalletController extends Controller
             'total_earned' => $totalEarned,
             'total_commissions' => $totalCommissions,
             'total_quiz_and_bonus' => $totalQuizAndBonus,
+            'total_deposits' => $totalDeposits, // Pour debug
+            'total_purchases' => abs($totalPurchases), // Pour debug
         ]);
     }
 

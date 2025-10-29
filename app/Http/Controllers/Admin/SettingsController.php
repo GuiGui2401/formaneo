@@ -23,6 +23,7 @@ class SettingsController extends Controller
             'support_email' => Settings::getValue('support_email', 'support@formaneo.com'),
             'support_phone' => Settings::getValue('support_phone', '+225 XX XX XX XX XX'),
             'support_whatsapp' => Settings::getValue('support_whatsapp', '+225XXXXXXXXXX'),
+            'account_activation_cost' => Settings::getValue('account_activation_cost', 5000),
         ];
 
         return view('admin.settings.index', compact('settings'));
@@ -43,6 +44,7 @@ class SettingsController extends Controller
             'support_email' => 'nullable|email',
             'support_phone' => 'nullable|string|max:20',
             'support_whatsapp' => 'nullable|string|max:20',
+            'account_activation_cost' => 'required|numeric|min:100',
         ]);
 
         foreach ($request->only([
@@ -57,7 +59,8 @@ class SettingsController extends Controller
             'free_quizzes_per_user',
             'support_email',
             'support_phone',
-            'support_whatsapp'
+            'support_whatsapp',
+            'account_activation_cost'
         ]) as $key => $value) {
             Settings::setValue($key, $value);
         }

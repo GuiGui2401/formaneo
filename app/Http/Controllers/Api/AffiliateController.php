@@ -14,6 +14,14 @@ class AffiliateController extends Controller
     public function dashboard(Request $request)
     {
         $user = $request->user();
+        
+        // Vérifier que le compte est activé pour accéder aux données sensibles
+        if ($user->account_status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Activez votre compte pour accéder au programme d\'affiliation'
+            ], 403);
+        }
 
         // --- IDs des affiliés ---
         $referredUserIds = User::where('referred_by', $user->id)->pluck('id');
@@ -90,6 +98,17 @@ class AffiliateController extends Controller
 
         $activeAffiliates = User::where('referred_by', $user->id)->where('last_login_at', '>', now()->subDays(30))->count();
 
+        // --- Calcul des sous-affiliés niveau 2 ---
+        // Récupérer tous mes affiliés directs (niveau 1)
+        $directAffiliates = User::where('referred_by', $user->id)->pluck('id');
+        
+        // Compter les affiliés de mes affiliés (niveau 2)
+        $level2AffiliatesTotal = User::whereIn('referred_by', $directAffiliates)->count();
+        $level2AffiliatesMonthly = User::whereIn('referred_by', $directAffiliates)
+            ->whereYear('created_at', now()->year)
+            ->whereMonth('created_at', now()->month)
+            ->count();
+
         return response()->json([
             'earnings' => [
                 'today' => $todayCommissions,
@@ -109,6 +128,10 @@ class AffiliateController extends Controller
                     'yearly' => $yearlyConversions,
                     'total' => $totalConversions,
                 ],
+                'level2_affiliates' => [
+                    'total' => $level2AffiliatesTotal,
+                    'monthly' => $level2AffiliatesMonthly,
+                ],
                 'active_affiliates' => $activeAffiliates,
                 'total_commissions' => $totalCommissions,
             ],
@@ -121,6 +144,19 @@ class AffiliateController extends Controller
     public function getDetailedStats(Request $request)
     {
         $user = $request->user();
+        
+        // Vérifier que le compte est activé
+        if ($user->account_status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Activez votre compte pour accéder aux statistiques d\'affiliation'
+            ], 403);
+        }
+
+        // Si les fake data sont activées, retourner les données simulées
+        if ($user->fake_affiliate_data_enabled && $user->fake_affiliate_data) {
+            return response()->json($user->fake_affiliate_data);
+        }
 
         // --- Top Performers (utilisateurs référés qui ont généré le plus de commissions cette semaine) ---
         $topPerformers = User::where('referred_by', $user->id)

@@ -10,6 +10,8 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Password;
+use App\Models\AdminNotification;
+use App\Models\Settings;
 
 class AuthController extends Controller
 {
@@ -28,26 +30,62 @@ class AuthController extends Controller
             $promo = strtoupper(Str::random(5));
         }
 
+        // Determine account status based on platform
+        $accountStatus = 'inactive'; // Default for web
+        $balance = 0; // No welcome bonus until activation
+        
+        // Check if request is from mobile
+        if ($request->header('X-Platform') === 'mobile') {
+            $accountStatus = 'active';
+            $balance = 2000.0; // Mobile users get immediate welcome bonus
+        }
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'promo_code' => $promo,
             'affiliate_link' => config('app.url') . "/invite/{$promo}",
-            'balance' => 1000.0, // Bonus de bienvenue
+            'balance' => $balance,
             'free_quizzes_left' => 5, // Quiz gratuits
+            'account_status' => $accountStatus,
+            'welcome_bonus_claimed' => $accountStatus === 'active',
         ]);
+
+        // Create welcome bonus transaction only for mobile or active accounts
+        if ($accountStatus === 'active') {
+            $user->transactions()->create([
+                'type' => 'bonus',
+                'amount' => 2000.0,
+                'description' => 'Bonus de bienvenue',
+                'status' => 'completed',
+                'meta' => json_encode([
+                    'bonus_type' => 'welcome_bonus',
+                    'user_id' => $user->id
+                ])
+            ]);
+        }
 
         // Si code promo fourni, lier l'utilisateur au parrain
         if ($request->promo_code) {
             $referrer = User::where('promo_code', $request->promo_code)->first();
             if ($referrer) {
-                // Lier le nouvel utilisateur au parrain (sans commission à l'inscription)
+                // Lier le nouvel utilisateur au parrain
                 $user->update(['referred_by' => $referrer->id]);
+                
+                // Les commissions seront données lors de l'activation du compte, pas à l'inscription
+                // Mettre à jour seulement les statistiques du parrain
+                $referrer->increment('total_affiliates');
+                $referrer->increment('monthly_affiliates');
             }
         }
 
         $token = $user->createToken('api-token')->plainTextToken;
+
+        // Create admin notification for web registrations only
+        if ($accountStatus === 'inactive') {
+            AdminNotification::createNewUserNotification($user);
+        }
 
         return response()->json([
             'success' => true,
